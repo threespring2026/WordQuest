@@ -125,16 +125,36 @@ const StoryModule = (function() {
       
     } catch (error) {
       console.error('Story generation failed:', error);
-      UI.showToast('生成失败，使用备用故事', 'error');
-      
-      synopsis = MOCK_CONFIG.synopsis;
-      storyConfig = MOCK_CONFIG.storyConfig;
-      
-      showSynopsis();
-      document.getElementById('story-buttons').classList.remove('hidden');
+      showNetworkError(error.message || '网络断开：无法连接 AI 服务');
     } finally {
       isGenerating = false;
     }
+  }
+
+  // 显示网络错误
+  function showNetworkError(message) {
+    document.getElementById('loading-indicator').innerHTML = `
+      <div class="flex flex-col items-center text-red-500">
+        <div class="text-4xl mb-2">⚠️</div>
+        <div class="font-bold mb-1">网络断开</div>
+        <div class="text-sm text-gray-500">${message}</div>
+      </div>
+    `;
+    document.getElementById('wizard-sprite').classList.remove('animate-pulse');
+    document.getElementById('wizard-sprite').textContent = '😵';
+    document.getElementById('progress-panel').classList.add('hidden');
+    
+    // 显示重试按钮
+    document.getElementById('story-buttons').innerHTML = `
+      <button id="btn-back" class="btn-3d btn-gray flex-1">返回</button>
+      <button id="btn-retry" class="btn-3d btn-blue flex-1">重试</button>
+    `;
+    document.getElementById('story-buttons').classList.remove('hidden');
+    
+    document.getElementById('btn-back')?.addEventListener('click', () => Router.back());
+    document.getElementById('btn-retry')?.addEventListener('click', () => {
+      location.reload();
+    });
   }
 
   // 显示故事简介

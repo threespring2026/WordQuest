@@ -27,6 +27,14 @@ const App = (function() {
       // 监听全局事件
       this.setupGlobalListeners();
 
+      // 检查 URL 是否为地图编辑入口
+      if (location.hash === '#map-editor') {
+        Router.go('mapEditor');
+        initialized = true;
+        console.log('✅ WordQuest Ready!');
+        return;
+      }
+
       // 检查用户登录状态，决定初始场景
       const isLoggedIn = Store.get('isLoggedIn');
       const initialScene = isLoggedIn ? 'wordbook' : 'auth';
@@ -57,6 +65,9 @@ const App = (function() {
       }
       if (typeof ResultModule !== 'undefined') {
         Router.register('result', ResultModule);
+      }
+      if (typeof MapEditorModule !== 'undefined') {
+        Router.register('mapEditor', MapEditorModule);
       }
     },
 

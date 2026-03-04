@@ -16,6 +16,19 @@ const GameModule = (function() {
   let mapWidth = 0;
   let mapHeight = 0;
 
+  // 点在多边形内（射线法）
+  function pointInPolygon(x, y, polygon) {
+    if (!polygon || polygon.length < 3) return false;
+    let inside = false;
+    const n = polygon.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
   // 渲染页面
   function render() {
     const mapConfig = API.getMapConfig(storyConfig.mapId);
@@ -194,6 +207,17 @@ const GameModule = (function() {
     
     x = Math.max(minX, Math.min(maxX - 50, x));
     y = Math.max(minY, Math.min(maxY - 60, y));
+    
+    // 检查是否在障碍区内（比例坐标 0-1）
+    const rx = x / mapWidth;
+    const ry = y / mapHeight;
+    const blocked = mapConfig.blockedPolygons || [];
+    for (let i = 0; i < blocked.length; i++) {
+      if (pointInPolygon(rx, ry, blocked[i])) {
+        UI.showToast('无法到达', 'info');
+        return;
+      }
+    }
     
     movePlayerTo(x - 25, y - 30);
   }

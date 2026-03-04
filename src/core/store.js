@@ -32,7 +32,7 @@ const Store = (function() {
     
     // 设置
     settings: {
-      useMockAI: true,
+      useMockAI: false,  // false = 使用真实 AI，true = 使用 Mock 数据
       language: 'zh-CN'
     }
   };
@@ -54,6 +54,8 @@ const Store = (function() {
         if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
         state.isLoggedIn = !!parsed.user;
       }
+      // 强制使用真实 AI（覆盖旧的 localStorage 设置）
+      state.settings.useMockAI = false;
     } catch (e) {
       console.warn('Store: Failed to load from localStorage', e);
     }

@@ -190,34 +190,73 @@ const API = (function() {
     // ==================== 故事生成 ====================
 
     /**
-     * 生成故事简介（Mock）
+     * 生成故事简介
      * @param {Array} words - 单词列表
      */
     async generateSynopsis(words) {
-      await delay(1500);
-      
+      // 使用 Mock 数据模式
       if (Store.get('settings.useMockAI')) {
+        await delay(1500);
         return MOCK_CONFIG.synopsis;
       }
       
-      // 真实 AI 调用（待实现）
-      return MOCK_CONFIG.synopsis;
+      // 调用真实 AI
+      console.log('🤖 正在调用 AI 生成故事简介...');
+      
+      try {
+        const response = await callAI(
+          PROMPTS.synopsis.system,
+          PROMPTS.synopsis.user(words)
+        );
+        
+        // 解析 JSON（移除可能的 markdown 代码块标记）
+        const cleanJson = response.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const result = JSON.parse(cleanJson);
+        
+        console.log('✅ 故事简介生成成功:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ AI 生成故事简介失败:', error);
+        throw new Error('网络断开：无法连接 AI 服务');
+      }
     },
 
     /**
-     * 生成完整故事配置（Mock）
+     * 生成完整故事配置
      * @param {Array} words - 单词列表
      * @param {Object} synopsis - 故事简介
      */
     async generateStoryConfig(words, synopsis) {
-      await delay(2000);
-      
+      // 使用 Mock 数据模式
       if (Store.get('settings.useMockAI')) {
+        await delay(2000);
         return MOCK_CONFIG.storyConfig;
       }
       
-      // 真实 AI 调用（待实现）
-      return MOCK_CONFIG.storyConfig;
+      // 调用真实 AI
+      console.log('🤖 正在调用 AI 生成完整剧本...');
+      
+      try {
+        const response = await callAI(
+          PROMPTS.storyConfig.system,
+          PROMPTS.storyConfig.user(words, synopsis)
+        );
+        
+        // 解析 JSON（移除可能的 markdown 代码块标记）
+        const cleanJson = response.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const result = JSON.parse(cleanJson);
+        
+        // 验证基本结构
+        if (!result.mapId || !result.npcs || !result.dialogues) {
+          throw new Error('AI 返回的数据结构不完整');
+        }
+        
+        console.log('✅ 完整剧本生成成功:', result);
+        return result;
+      } catch (error) {
+        console.error('❌ AI 生成剧本失败:', error);
+        throw new Error('网络断开：无法连接 AI 服务');
+      }
     },
 
     // ==================== 游戏数据 ====================
@@ -262,11 +301,21 @@ const API = (function() {
     // ==================== 地图和 NPC ====================
 
     /**
-     * 获取地图配置
+     * 获取地图配置（合并编辑页保存的覆盖：npcSlots / walkableBounds / blockedPolygons）
      * @param {number} mapId 
      */
     getMapConfig(mapId) {
-      return MAPS_CONFIG[mapId] || MAPS_CONFIG[1];
+      const base = MAPS_CONFIG[mapId] || MAPS_CONFIG[1];
+      let overrides = {};
+      try {
+        overrides = JSON.parse(localStorage.getItem('wordquest_map_editor_overrides') || '{}')[String(mapId)] || {};
+      } catch (_) {}
+      return {
+        ...base,
+        npcSlots: overrides.npcSlots ? { ...base.npcSlots, ...overrides.npcSlots } : base.npcSlots,
+        walkableBounds: overrides.walkableBounds || base.walkableBounds,
+        blockedPolygons: overrides.blockedPolygons || []
+      };
     },
 
     /**
