@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>WordQuest - 词境历险</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="src/styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 场景内容将由 JS 动态渲染 -->
+    <div class="flex items-center justify-center h-full">
+      <div class="text-center">
+        <div class="loader mx-auto mb-4"></div>
+        <p class="text-gray-500">Loading WordQuest...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全局加载器 -->
+  <div id="global-loader" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-xl p-6 flex flex-col items-center">
+      <div class="loader mb-3"></div>
+      <span class="text-gray-600 loader-message">Loading...</span>
+    </div>
+  </div>
+
+  <!-- 单词释义弹窗 -->
+  <div id="word-tooltip" class="word-tooltip hidden"></div>
+
+  <!-- ==================== 配置文件 ==================== -->
+  <script src="src/config/mock.config.js"></script>
+  <script src="src/config/maps.config.js"></script>
+  <script src="src/config/npcs.config.js"></script>
+
+  <!-- ==================== 核心框架 ==================== -->
+  <script src="src/core/eventbus.js"></script>
+  <script src="src/core/store.js"></script>
+  <script src="src/core/router.js"></script>
+
+  <!-- ==================== 共享模块 ==================== -->
+  <script src="src/shared/ui.js"></script>
+  <script src="src/shared/api.js"></script>
+
+  <!-- ==================== 功能模块 ==================== -->
+  <script src="src/modules/auth/index.js"></script>
+  <script src="src/modules/wordbook/index.js"></script>
+  <script src="src/modules/story/index.js"></script>
+  <script src="src/modules/game/index.js"></script>
+  <script src="src/modules/result/index.js"></script>
+
+  <!-- ==================== 应用入口 ==================== -->
+  <script src="src/core/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,637 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+/**
+ * WordQuest 主样式文件
+ */
+
+/* ==================== 基础样式 ==================== */
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #e8e8e8;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.pixel-font {
+  font-family: 'Press Start 2P', cursive;
+}
+
+/* ==================== 应用容器 ==================== */
+#app {
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  max-height: 900px;
+  background: linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%);
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 500px) {
+  #app {
+    margin: 20px;
+    height: calc(100vh - 40px);
+  }
+}
+
+/* ==================== 场景容器 ==================== */
+.scene {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%);
+}
+
+.scene.active {
+  display: flex;
+}
+
+/* ==================== 横幅标题 ==================== */
+.banner {
+  background: linear-gradient(180deg, #5bc0de 0%, #4aa3c2 100%);
+  border: 3px solid #3d8fa8;
+  border-radius: 8px;
+  padding: 8px 24px;
+  margin: 16px auto;
+  position: relative;
+  box-shadow: 0 4px 0 #2d7a91;
+}
+
+.banner::before,
+.banner::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 30px;
+  background: linear-gradient(180deg, #4aa3c2 0%, #3d8fa8 100%);
+  border: 2px solid #3d8fa8;
+}
+
+.banner::before {
+  left: -15px;
+  border-radius: 4px 0 0 4px;
+}
+
+.banner::after {
+  right: -15px;
+  border-radius: 0 4px 4px 0;
+}
+
+.banner-text {
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: 2px 2px 0 #2d7a91;
+  letter-spacing: 2px;
+}
+
+/* ==================== 3D 按钮 ==================== */
+.btn-3d {
+  border: none;
+  border-radius: 8px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-3d:active {
+  transform: translateY(4px);
+  box-shadow: none !important;
+}
+
+.btn-3d:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-green {
+  background: linear-gradient(180deg, #7ed56f 0%, #5cb85c 100%);
+  color: white;
+  box-shadow: 0 4px 0 #449d44;
+  text-shadow: 1px 1px 0 #449d44;
+}
+
+.btn-green:hover:not(:disabled) {
+  background: linear-gradient(180deg, #8ee07f 0%, #6cc86c 100%);
+}
+
+.btn-blue {
+  background: linear-gradient(180deg, #5bc0de 0%, #46b8da 100%);
+  color: white;
+  box-shadow: 0 4px 0 #31a2c3;
+  text-shadow: 1px 1px 0 #31a2c3;
+}
+
+.btn-gray {
+  background: linear-gradient(180deg, #b0b0b0 0%, #999999 100%);
+  color: white;
+  box-shadow: 0 4px 0 #777777;
+  text-shadow: 1px 1px 0 #777777;
+}
+
+.btn-yellow {
+  background: linear-gradient(180deg, #f0ad4e 0%, #ec971f 100%);
+  color: white;
+  box-shadow: 0 4px 0 #d58512;
+  text-shadow: 1px 1px 0 #d58512;
+}
+
+/* ==================== 卡片样式 ==================== */
+.card {
+  background: linear-gradient(180deg, #e8f4fc 0%, #d4ecf7 100%);
+  border: 2px solid #b8d4e8;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+/* ==================== 表单输入 ==================== */
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  background: white;
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #5bc0de;
+}
+
+.input-field::placeholder {
+  color: #aaa;
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.input-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #999;
+}
+
+.input-group .input-field {
+  padding-left: 40px;
+}
+
+/* ==================== 单词标签 ==================== */
+.word-tag {
+  display: inline-block;
+  background: white;
+  border: 2px solid #ccc;
+  border-radius: 20px;
+  padding: 6px 14px;
+  margin: 4px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.word-tag:hover {
+  border-color: #5bc0de;
+  background: #f0f8ff;
+}
+
+.word-tag.selected {
+  background: #5bc0de;
+  border-color: #4aa3c2;
+  color: white;
+}
+
+/* ==================== 关键词高亮 ==================== */
+.keyword {
+  color: #e74c3c;
+  font-weight: bold;
+  cursor: help;
+}
+
+/* ==================== 加载动画 ==================== */
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top-color: #5bc0de;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==================== 对话气泡 ==================== */
+.bubble {
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 16px;
+  padding: 12px 16px;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.bubble-npc::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 30px;
+  border-width: 10px 10px 0;
+  border-style: solid;
+  border-color: white transparent transparent;
+}
+
+.bubble-npc::before {
+  content: '';
+  position: absolute;
+  bottom: -14px;
+  left: 28px;
+  border-width: 12px 12px 0;
+  border-style: solid;
+  border-color: #ddd transparent transparent;
+}
+
+/* ==================== 选项按钮 ==================== */
+.option-btn {
+  width: 100%;
+  background: linear-gradient(180deg, #e8f4fc 0%, #d4ecf7 100%);
+  border: 2px solid #a8d4e8;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 6px 0;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.option-btn:hover {
+  background: linear-gradient(180deg, #d4ecf7 0%, #c0e4f3 100%);
+  border-color: #7cc4e0;
+}
+
+.option-btn:active {
+  transform: scale(0.98);
+}
+
+.option-btn.correct {
+  background: linear-gradient(180deg, #d4edda 0%, #c3e6cb 100%);
+  border-color: #28a745;
+}
+
+.option-btn.wrong {
+  background: linear-gradient(180deg, #f8d7da 0%, #f5c6cb 100%);
+  border-color: #dc3545;
+  opacity: 0.6;
+}
+
+.option-btn.disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* ==================== 游戏地图 ==================== */
+#game-map {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+}
+
+#game-map canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.npc-sprite {
+  position: absolute;
+  width: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+  z-index: 5;
+}
+
+.npc-sprite:hover {
+  transform: scale(1.05);
+}
+
+.npc-image {
+  width: 60px;
+  height: 70px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.npc-name-top {
+  font-size: 10px;
+  color: #333;
+  background: rgba(255,255,255,0.95);
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.npc-exclamation {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 24px;
+  background: #e74c3c;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+  animation: bounce 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateX(-50%) translateY(0); }
+  to { transform: translateX(-50%) translateY(-5px); }
+}
+
+.player-sprite {
+  position: absolute;
+  width: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: left 0.5s ease-out, top 0.5s ease-out;
+  z-index: 10;
+}
+
+.player-image {
+  width: 50px;
+  height: 60px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.player-avatar-default {
+  width: 40px;
+  height: 50px;
+  background: #4a90e2;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: white;
+  border: 2px solid white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.player-name-top {
+  font-size: 9px;
+  color: white;
+  background: #4a90e2;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* ==================== 对话面板 ==================== */
+#dialogue-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255,255,255,0.98);
+  border-top: 2px solid #ddd;
+  padding: 12px;
+  max-height: 60%;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+/* ==================== 单词释义弹窗 ==================== */
+.word-tooltip {
+  position: fixed;
+  background: white;
+  border: 2px solid #5bc0de;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  max-width: 200px;
+  font-size: 13px;
+}
+
+.word-tooltip .word-title {
+  font-weight: bold;
+  color: #e74c3c;
+  font-size: 15px;
+}
+
+.word-tooltip .word-phonetic {
+  color: #666;
+  font-size: 12px;
+  margin: 4px 0;
+}
+
+.word-tooltip .word-definition {
+  color: #333;
+}
+
+/* ==================== 结算面板 ==================== */
+.result-panel {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  margin: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.star {
+  font-size: 40px;
+  color: #ddd;
+  margin: 0 4px;
+  transition: all 0.3s ease;
+}
+
+.star.active {
+  color: #f1c40f;
+  text-shadow: 0 2px 4px rgba(241, 196, 15, 0.4);
+}
+
+/* ==================== 翻译按钮 ==================== */
+.translate-btn {
+  background: linear-gradient(180deg, #5bc0de 0%, #46b8da 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.translation-text {
+  display: none;
+  margin-top: 8px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #666;
+}
+
+.translation-text.show {
+  display: block;
+}
+
+/* ==================== 签到日历 ==================== */
+.checkin-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.checkin-day {
+  width: 100%;
+  aspect-ratio: 1;
+  background: #e0e0e0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.checkin-day.checked {
+  background: #f1c40f;
+  color: white;
+}
+
+.checkin-day.checked::after {
+  content: '★';
+}
+
+/* ==================== 头像 ==================== */
+.avatar-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid #5bc0de;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  background: white;
+}
+
+/* ==================== 隐藏类 ==================== */
+.hidden {
+  display: none !important;
+}
+
+/* ==================== 形象选择 ==================== */
+.avatar-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border: 3px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-option:hover {
+  background: #f0f8ff;
+}
+
+.avatar-option.selected {
+  border-color: #5bc0de;
+  background: #e8f4fc;
+}
+
+/* ==================== 单词显示标签 ==================== */
+.word-tag-display {
+  display: inline-block;
+  background: white;
+  border: 2px solid #5bc0de;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: #333;
+  cursor: help;
+}
+
+/* ==================== 可悬停单词 ==================== */
+.word-hover {
+  cursor: help;
+  border-bottom: 1px dotted #999;
+}
+
+.word-hover:hover {
+  background: #fff3cd;
+}
+
+/* ==================== 游戏地图 ==================== */
+#game-map {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  min-height: 300px;
+}
+
+#game-map img {
+  pointer-events: none;
+}
+
+/* ==================== 动画 ==================== */
+.animate-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
