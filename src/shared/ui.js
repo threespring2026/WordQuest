@@ -172,10 +172,10 @@ const UI = (function() {
     },
 
     /**
-     * 显示单词释义弹窗
+     * 显示单词释义弹窗（显示在单词上方）
      * @param {Object} wordData - 单词数据
-     * @param {number} x - X 坐标
-     * @param {number} y - Y 坐标
+     * @param {number} x - X 坐标（鼠标位置）
+     * @param {number} y - Y 坐标（鼠标位置）
      */
     showWordTooltip(wordData, x, y) {
       let tooltip = document.getElementById('word-tooltip');
@@ -186,16 +186,28 @@ const UI = (function() {
         });
         document.body.appendChild(tooltip);
       }
-      
+
       tooltip.innerHTML = `
         <div class="word-title">${wordData.word}</div>
         <div class="word-phonetic">${wordData.phonetic || ''}</div>
         <div class="word-definition">${wordData.partOfSpeech || ''} ${wordData.definition}</div>
       `;
-      
-      tooltip.style.left = Math.min(x, window.innerWidth - 220) + 'px';
-      tooltip.style.top = (y + 20) + 'px';
+
+      // 先临时显示以获取高度
+      tooltip.style.visibility = 'hidden';
       tooltip.classList.remove('hidden');
+      const tooltipH = tooltip.offsetHeight || 72;
+      tooltip.style.visibility = '';
+
+      // 计算左侧位置，避免超出屏幕右边
+      const left = Math.min(x, window.innerWidth - 220);
+
+      // 显示在鼠标上方；若空间不足则显示在下方
+      let top = y - tooltipH - 8;
+      if (top < 5) top = y + 20;
+
+      tooltip.style.left = left + 'px';
+      tooltip.style.top  = top  + 'px';
     },
 
     /**

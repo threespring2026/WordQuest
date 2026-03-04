@@ -126,16 +126,14 @@ const GameModule = (function() {
     playerEl.style.left = (playerX - 25) + 'px';
     playerEl.style.top = (playerY - 30) + 'px';
     
-    const avatarImg = user?.avatar === 'girl' 
-      ? 'assets/player/player_girl.png' 
-      : (user?.avatar === 'boy' ? 'assets/player/player_boy.png' : null);
-    
+    const avatarMap = { boy: 'assets/player/player_boy.png', girl: 'assets/player/player_girl.png' };
+    const avatarImg = user?.isGuest
+      ? 'assets/player/player_guest.png'
+      : (avatarMap[user?.avatar] || 'assets/player/player_guest.png');
+
     playerEl.innerHTML = `
-      <div class="player-name-top">${user?.nickname || '玩家'}</div>
-      ${avatarImg 
-        ? `<img src="${avatarImg}" alt="Player" class="player-image">`
-        : '<div class="player-avatar-default">👤</div>'
-      }
+      <div class="player-name-top">${user?.nickname || '游客'}</div>
+      <img src="${avatarImg}" alt="Player" class="player-image">
     `;
     mapEl.appendChild(playerEl);
     

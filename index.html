@@ -29,10 +29,27 @@
   <!-- 单词释义弹窗 -->
   <div id="word-tooltip" class="word-tooltip hidden"></div>
 
+  <!-- 全局错误捕获（开发调试用） -->
+  <div id="error-overlay" style="display:none;position:fixed;inset:0;background:#fee;z-index:9999;overflow:auto;padding:16px;font-family:monospace;font-size:13px;color:#c00;"></div>
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var el = document.getElementById('error-overlay');
+      el.style.display = 'block';
+      el.innerHTML += '<b>错误：</b>' + msg + '<br><b>文件：</b>' + src + '  第' + line + '行<br><br>';
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var el = document.getElementById('error-overlay');
+      el.style.display = 'block';
+      el.innerHTML += '<b>Promise 错误：</b>' + (e.reason?.message || e.reason) + '<br><br>';
+    });
+  </script>
+
   <!-- ==================== 配置文件 ==================== -->
   <script src="src/config/mock.config.js"></script>
   <script src="src/config/maps.config.js"></script>
   <script src="src/config/npcs.config.js"></script>
+  <script src="src/config/dictionary.js"></script>
 
   <!-- ==================== 核心框架 ==================== -->
   <script src="src/core/eventbus.js"></script>

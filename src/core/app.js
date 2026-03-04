@@ -21,6 +21,9 @@ const App = (function() {
       // 注册所有场景模块
       this.registerModules();
 
+      // 后台预加载所有图片资源
+      this.preloadAssets();
+
       // 监听全局事件
       this.setupGlobalListeners();
 
@@ -103,6 +106,40 @@ const App = (function() {
       EventBus.on(Events.SCENE_CHANGE, ({ scene }) => {
         console.log(`📍 Scene: ${scene}`);
       });
+    },
+
+    /**
+     * 预加载所有游戏图片资源（静默后台加载，避免进入游戏时白屏）
+     */
+    preloadAssets() {
+      const images = [];
+
+      // 地图背景图
+      if (typeof MAPS_CONFIG !== 'undefined') {
+        Object.values(MAPS_CONFIG).forEach(m => m.image && images.push(m.image));
+      }
+
+      // NPC 图片（idle / surprised / head）
+      if (typeof NPCS_CONFIG !== 'undefined') {
+        Object.values(NPCS_CONFIG).forEach(npc => {
+          if (npc.images) {
+            Object.values(npc.images).forEach(src => src && images.push(src));
+          }
+        });
+      }
+
+      // 玩家形象图片
+      if (typeof PLAYER_AVATARS !== 'undefined') {
+        Object.values(PLAYER_AVATARS).forEach(p => p.image && images.push(p.image));
+      }
+
+      // 创建隐藏 img 元素触发浏览器缓存
+      images.forEach(src => {
+        const img = new Image();
+        img.src = src;
+      });
+
+      console.log(`🖼️ Preloading ${images.length} assets...`);
     },
 
     /**

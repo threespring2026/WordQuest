@@ -154,25 +154,37 @@ const API = (function() {
     },
 
     /**
-     * 查询单词释义
+     * 查询单词释义（优先从本地词典查，再从 wordPack 查）
      * @param {string} word 
      */
     async lookupWord(word) {
-      await delay(100);
-      
-      const found = MOCK_CONFIG.wordPack.find(w => 
+      // 先查本地词典（无网络延迟）
+      const dictResult = dictLookup(word);
+      if (dictResult) return dictResult;
+
+      // 再查 mock wordPack
+      const found = MOCK_CONFIG.wordPack.find(w =>
         w.word.toLowerCase() === word.toLowerCase()
       );
-      
       if (found) return found;
-      
+
+      await delay(50);
+
       // 未找到时返回占位数据
       return {
-        word: word,
-        phonetic: '',
-        partOfSpeech: '',
-        definition: '（暂无释义）'
+        word:        word.toLowerCase(),
+        phonetic:    '',
+        partOfSpeech:'',
+        definition:  '（暂无释义）'
       };
+    },
+
+    /**
+     * 从本地词典随机抽取单词
+     * @param {number} count
+     */
+    getRandomDictWords(count = 8) {
+      return dictRandomWords(count);
     },
 
     // ==================== 故事生成 ====================

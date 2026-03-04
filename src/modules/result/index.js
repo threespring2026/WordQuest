@@ -201,9 +201,23 @@ const ResultModule = (function() {
   // 保存游戏结果
   async function saveResult() {
     const user = Store.get('user');
-    
+
+    // 根据答题结果更新单词熟悉度
+    if (typeof WordbookModule !== 'undefined') {
+      wordPack.forEach(w => {
+        const ans = answers.find(a => {
+          const dialogue = Store.get('session.storyConfig')?.dialogues?.find(
+            d => d.npcId === a.npcId && d.round === a.round
+          );
+          return dialogue?.options?.some(o => o.text.toLowerCase().includes(w.word.toLowerCase()));
+        });
+        const correct = ans ? ans.isCorrect && ans.attempts === 1 : false;
+        WordbookModule.updateFamiliarity(w.word, correct);
+      });
+    }
+
     if (!user || user.isGuest) return;
-    
+
     try {
       await API.saveGameResult({
         userId: user.id,

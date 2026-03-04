@@ -69,7 +69,8 @@ const Router = (function() {
      */
     back() {
       if (history.length === 0) {
-        console.warn('Router: No history to go back');
+        // 无历史则回到 auth（兜底）
+        this.go('auth');
         return;
       }
       

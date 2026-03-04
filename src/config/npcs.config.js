@@ -99,7 +99,7 @@ const PLAYER_AVATARS = {
   guest: {
     id: "guest",
     name: "游客",
-    image: null  // 游客使用默认图标
+    image: "assets/player/player_guest.png"
   }
 };
 
