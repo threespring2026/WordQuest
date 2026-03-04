@@ -16,6 +16,12 @@ const GameModule = (function() {
   let mapWidth = 0;
   let mapHeight = 0;
 
+  // 寻路：网格与速度
+  const GRID_COLS = 48;
+  const GRID_ROWS = 64;
+  const MOVE_SPEED = 140;  // 像素/秒
+  let moveAnimationId = null;
+
   // 点在多边形内（射线法）
   function pointInPolygon(x, y, polygon) {
     if (!polygon || polygon.length < 3) return false;
@@ -27,6 +33,105 @@ const GameModule = (function() {
       if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
     }
     return inside;
+  }
+
+  // 网格格子在可行走矩形内且不在障碍多边形内
+  function isWalkable(mapConfig, gx, gy) {
+    const x = (gx + 0.5) / GRID_COLS;
+    const y = (gy + 0.5) / GRID_ROWS;
+    const b = mapConfig.walkableBounds;
+    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return false;
+    const blocked = mapConfig.blockedPolygons || [];
+    for (let i = 0; i < blocked.length; i++) {
+      if (pointInPolygon(x, y, blocked[i])) return false;
+    }
+    return true;
+  }
+
+  // 点 (0-1) 是否在可行走区域内
+  function isPointWalkable(mapConfig, x, y) {
+    const b = mapConfig.walkableBounds;
+    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return false;
+    const blocked = mapConfig.blockedPolygons || [];
+    for (let i = 0; i < blocked.length; i++) {
+      if (pointInPolygon(x, y, blocked[i])) return false;
+    }
+    return true;
+  }
+
+  // 若出生点落在障碍内，返回最近的可行走点 (0-1)
+  function ensureWalkableSpawn(mapConfig, x, y) {
+    if (isPointWalkable(mapConfig, x, y)) return { x, y };
+    let best = { x, y };
+    let bestDist = Infinity;
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        if (!isWalkable(mapConfig, gx, gy)) continue;
+        const cx = (gx + 0.5) / GRID_COLS;
+        const cy = (gy + 0.5) / GRID_ROWS;
+        const d = (cx - x) ** 2 + (cy - y) ** 2;
+        if (d < bestDist) {
+          bestDist = d;
+          best = { x: cx, y: cy };
+        }
+      }
+    }
+    return best;
+  }
+
+  // A* 寻路，起点终点为地图像素坐标，返回玩家坐标序列 [ {left, top}, ... ]
+  function findPath(mapConfig, startMapX, startMapY, endMapX, endMapY) {
+    const toGrid = (px, py) => ({
+      gx: Math.floor((px / mapWidth) * GRID_COLS),
+      gy: Math.floor((py / mapHeight) * GRID_ROWS)
+    });
+    const toPlayer = (gx, gy) => ({
+      left: ((gx + 0.5) / GRID_COLS) * mapWidth - 25,
+      top: ((gy + 0.5) / GRID_ROWS) * mapHeight - 30
+    });
+    const clampGrid = (gx, gy) => ({
+      gx: Math.max(0, Math.min(GRID_COLS - 1, gx)),
+      gy: Math.max(0, Math.min(GRID_ROWS - 1, gy))
+    });
+
+    const s = clampGrid(toGrid(startMapX, startMapY).gx, toGrid(startMapX, startMapY).gy);
+    const e = clampGrid(toGrid(endMapX, endMapY).gx, toGrid(endMapX, endMapY).gy);
+    if (!isWalkable(mapConfig, e.gx, e.gy)) return [];
+
+    const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    const open = [{ gx: s.gx, gy: s.gy, f: 0, g: 0 }];
+    const cameFrom = {};
+    const gScore = { [`${s.gx},${s.gy}`]: 0 };
+
+    const key = (gx, gy) => `${gx},${gy}`;
+    const heuristic = (a, b) => Math.abs(a.gx - b.gx) + Math.abs(a.gy - b.gy);
+
+    while (open.length > 0) {
+      open.sort((a, b) => a.f - b.f);
+      const cur = open.shift();
+      if (cur.gx === e.gx && cur.gy === e.gy) {
+        const path = [];
+        let c = cur;
+        while (c) {
+          path.unshift(toPlayer(c.gx, c.gy));
+          c = cameFrom[key(c.gx, c.gy)];
+        }
+        return path;
+      }
+      for (const [dx, dy] of neighbors) {
+        const nx = cur.gx + dx;
+        const ny = cur.gy + dy;
+        if (nx < 0 || nx >= GRID_COLS || ny < 0 || ny >= GRID_ROWS) continue;
+        if (!isWalkable(mapConfig, nx, ny)) continue;
+        const tentative = (gScore[key(cur.gx, cur.gy)] || 0) + 1;
+        const nk = key(nx, ny);
+        if (tentative >= (gScore[nk] ?? Infinity)) continue;
+        cameFrom[nk] = cur;
+        gScore[nk] = tentative;
+        open.push({ gx: nx, gy: ny, g: tentative, f: tentative + heuristic({ gx: nx, gy: ny }, e) });
+      }
+    }
+    return [];
   }
 
   // 渲染页面
@@ -128,8 +233,8 @@ const GameModule = (function() {
       mapEl.appendChild(npcEl);
     });
     
-    // 放置玩家
-    const playerPos = mapConfig.playerStart;
+    // 放置玩家（若配置的出生点在障碍内，自动挪到最近可行走点）
+    const playerPos = ensureWalkableSpawn(mapConfig, mapConfig.playerStart.x, mapConfig.playerStart.y);
     const playerX = playerPos.x * mapWidth;
     const playerY = playerPos.y * mapHeight;
     
@@ -243,15 +348,77 @@ const GameModule = (function() {
     });
   }
 
-  // 移动玩家
-  function movePlayerTo(x, y, callback) {
+  // 沿路径动画移动玩家（目标为玩家元素 left/top）
+  function movePlayerTo(targetLeft, targetTop, callback) {
     const player = document.getElementById('player');
-    player.style.left = x + 'px';
-    player.style.top = y + 'px';
-    
-    if (callback) {
-      setTimeout(callback, 500);
+    if (!player) return;
+
+    if (moveAnimationId != null) {
+      cancelAnimationFrame(moveAnimationId);
+      moveAnimationId = null;
     }
+
+    const curLeft = parseFloat(player.style.left) || 0;
+    const curTop = parseFloat(player.style.top) || 0;
+    const dist = Math.hypot(targetLeft - curLeft, targetTop - curTop);
+    if (dist < 4) {
+      player.style.left = targetLeft + 'px';
+      player.style.top = targetTop + 'px';
+      if (callback) setTimeout(callback, 200);
+      return;
+    }
+
+    const mapConfig = API.getMapConfig(storyConfig.mapId);
+    const path = findPath(
+      mapConfig,
+      curLeft + 25, curTop + 30,
+      targetLeft + 25, targetTop + 30
+    );
+
+    if (path.length === 0) {
+      UI.showToast('无法到达', 'info');
+      if (callback) setTimeout(callback, 0);
+      return;
+    }
+
+    let pathIndex = 0;
+    let lastTime = performance.now();
+
+    function tick(now) {
+      if (isDialogueActive) {
+        moveAnimationId = null;
+        return;
+      }
+      const playerEl = document.getElementById('player');
+      if (!playerEl) {
+        moveAnimationId = null;
+        return;
+      }
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+      const left = parseFloat(playerEl.style.left) || 0;
+      const top = parseFloat(playerEl.style.top) || 0;
+      const next = path[pathIndex];
+      const dx = next.left - left;
+      const dy = next.top - top;
+      const d = Math.hypot(dx, dy);
+      const step = MOVE_SPEED * Math.min(dt, 0.1);
+      if (d <= step || d < 1) {
+        playerEl.style.left = next.left + 'px';
+        playerEl.style.top = next.top + 'px';
+        pathIndex++;
+        if (pathIndex >= path.length) {
+          moveAnimationId = null;
+          if (callback) setTimeout(callback, 200);
+          return;
+        }
+      } else {
+        playerEl.style.left = (left + (dx / d) * step) + 'px';
+        playerEl.style.top = (top + (dy / d) * step) + 'px';
+      }
+      moveAnimationId = requestAnimationFrame(tick);
+    }
+    moveAnimationId = requestAnimationFrame(tick);
   }
 
   // 开始对话
@@ -482,6 +649,10 @@ const GameModule = (function() {
     },
 
     unmount() {
+      if (moveAnimationId != null) {
+        cancelAnimationFrame(moveAnimationId);
+        moveAnimationId = null;
+      }
       container = null;
       isDialogueActive = false;
     },
