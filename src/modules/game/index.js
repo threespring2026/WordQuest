@@ -327,7 +327,22 @@ const GameModule = (function() {
     movePlayerTo(x - 25, y - 30);
   }
 
-  // NPC 点击
+  // 玩家与 NPC 的“可对话”距离（像素）
+  const TALK_RANGE = 100;
+
+  // 玩家是否在 NPC 对话范围内
+  function isPlayerNearNpc(npcId) {
+    const player = document.getElementById('player');
+    const npcEl = document.getElementById(`npc-${npcId}`);
+    if (!player || !npcEl) return false;
+    const px = parseFloat(player.style.left) + 25;
+    const py = parseFloat(player.style.top) + 30;
+    const nx = parseFloat(npcEl.style.left) + 30;
+    const ny = parseFloat(npcEl.style.top) + 40;
+    return Math.hypot(px - nx, py - ny) <= TALK_RANGE;
+  }
+
+  // NPC 点击：先移动到 NPC 附近，到达且距离足够近后才开始对话
   function onNpcClick(npcId) {
     if (isDialogueActive) return;
     
@@ -341,10 +356,20 @@ const GameModule = (function() {
     const npcEl = document.getElementById(`npc-${npcId}`);
     const npcLeft = parseFloat(npcEl.style.left);
     const npcTop = parseFloat(npcEl.style.top);
+    const targetLeft = npcLeft;
+    const targetTop = npcTop + 80;
     
-    // 移动到NPC附近
-    movePlayerTo(npcLeft, npcTop + 80, () => {
+    // 已在对话范围内则直接开始对话
+    if (isPlayerNearNpc(npcId)) {
       startDialogue();
+      return;
+    }
+    
+    // 否则先移动过去，到达后再检查距离并开始对话
+    movePlayerTo(targetLeft, targetTop, () => {
+      if (isPlayerNearNpc(npcId)) {
+        startDialogue();
+      }
     });
   }
 
@@ -377,7 +402,6 @@ const GameModule = (function() {
 
     if (path.length === 0) {
       UI.showToast('无法到达', 'info');
-      if (callback) setTimeout(callback, 0);
       return;
     }
 
