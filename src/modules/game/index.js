@@ -140,12 +140,9 @@ const GameModule = (function() {
     const user = Store.get('user');
     
     container.innerHTML = `
-      <!-- 顶部状态栏 -->
+      <!-- 顶部：软件名称 + 操作按钮 -->
       <div class="bg-white px-4 py-2 flex justify-between items-center border-b">
-        <div>
-          <div class="font-bold text-gray-800">回合: <span id="current-round">1</span> / ${storyConfig.dialogues.length}</div>
-          <div class="text-sm text-gray-500">氛围: <span id="current-mood" class="text-yellow-600 font-medium">${getMoodText(storyConfig.mood)}</span></div>
-        </div>
+        <div class="font-bold text-gray-800 pixel-font">词境历险</div>
         <div class="flex gap-2">
           <button id="btn-bgm" class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">
             🔊
@@ -182,6 +179,15 @@ const GameModule = (function() {
     }
     
     bindEvents();
+  }
+
+  function shuffleArray(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
   }
 
   // 获取氛围文字
@@ -270,8 +276,6 @@ const GameModule = (function() {
       return;
     }
     
-    document.getElementById('current-round').textContent = currentRound + 1;
-    
     // 隐藏所有感叹号，显示当前NPC的
     document.querySelectorAll('.npc-exclamation').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.npc-image').forEach(img => {
@@ -284,7 +288,7 @@ const GameModule = (function() {
     }
     
     dialogueStep = 'waiting';
-    availableOptions = [...dialogue.options];
+    availableOptions = shuffleArray([...dialogue.options]);
     isDialogueActive = false;
     document.getElementById('dialogue-panel').classList.add('hidden');
     

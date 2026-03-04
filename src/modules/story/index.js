@@ -3,12 +3,15 @@
  * 中文界面，AI 生成故事配置
  */
 
+const MAX_REGENERATE = 3;
+
 const StoryModule = (function() {
   let container = null;
   let wordPack = [];
   let synopsis = null;
   let storyConfig = null;
   let isGenerating = false;
+  let regenerateCount = 0;
 
   // 渲染页面
   function render() {
@@ -62,7 +65,7 @@ const StoryModule = (function() {
       
       <!-- 底部按钮 -->
       <div id="story-buttons" class="p-4 flex gap-3 hidden">
-        <button id="btn-regenerate" class="btn-3d btn-gray flex-1">重新生成</button>
+        <button id="btn-regenerate" class="btn-3d btn-gray flex-1">重新生成（剩余 <span id="regenerate-left">${MAX_REGENERATE}</span> 次）</button>
         <button id="btn-confirm" class="btn-3d btn-green flex-1">确认开始</button>
       </div>
     `;
@@ -119,6 +122,7 @@ const StoryModule = (function() {
       setTimeout(() => {
         document.getElementById('progress-panel').classList.add('hidden');
         document.getElementById('story-buttons').classList.remove('hidden');
+        updateRegenerateButton();
       }, 500);
       
       EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
@@ -177,8 +181,24 @@ const StoryModule = (function() {
     }
   }
 
-  // 重新生成
+  function updateRegenerateButton() {
+    const btn = document.getElementById('btn-regenerate');
+    const span = document.getElementById('regenerate-left');
+    const left = Math.max(0, MAX_REGENERATE - regenerateCount);
+    if (span) span.textContent = left;
+    if (btn) {
+      btn.disabled = left <= 0;
+      if (left <= 0) btn.title = '已达重新生成次数上限';
+    }
+  }
+
+  // 重新生成（最多 3 次）
   async function regenerate() {
+    if (regenerateCount >= MAX_REGENERATE) {
+      UI.showToast('重新生成次数已用完', 'info');
+      return;
+    }
+    regenerateCount++;
     document.getElementById('loading-indicator').classList.remove('hidden');
     document.getElementById('wizard-sprite').classList.add('animate-pulse');
     document.getElementById('synopsis-card').classList.add('hidden');
@@ -215,6 +235,7 @@ const StoryModule = (function() {
       synopsis = null;
       storyConfig = null;
       isGenerating = false;
+      regenerateCount = 0;
       
       render();
       EventBus.emit(Events.SCENE_READY, { scene: 'story' });

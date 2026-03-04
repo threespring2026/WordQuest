@@ -172,12 +172,16 @@ const UI = (function() {
     },
 
     /**
-     * 显示单词释义弹窗（显示在单词上方）
+     * 显示单词释义弹窗（显示在单词上方），4 秒后自动消失
      * @param {Object} wordData - 单词数据
      * @param {number} x - X 坐标（鼠标位置）
      * @param {number} y - Y 坐标（鼠标位置）
      */
     showWordTooltip(wordData, x, y) {
+      if (this._wordTooltipTimer) {
+        clearTimeout(this._wordTooltipTimer);
+        this._wordTooltipTimer = null;
+      }
       let tooltip = document.getElementById('word-tooltip');
       if (!tooltip) {
         tooltip = this.createElement('div', {
@@ -208,12 +212,21 @@ const UI = (function() {
 
       tooltip.style.left = left + 'px';
       tooltip.style.top  = top  + 'px';
+
+      this._wordTooltipTimer = setTimeout(() => {
+        this.hideWordTooltip();
+        this._wordTooltipTimer = null;
+      }, 4000);
     },
 
     /**
      * 隐藏单词释义弹窗
      */
     hideWordTooltip() {
+      if (this._wordTooltipTimer) {
+        clearTimeout(this._wordTooltipTimer);
+        this._wordTooltipTimer = null;
+      }
       const tooltip = document.getElementById('word-tooltip');
       if (tooltip) {
         tooltip.classList.add('hidden');

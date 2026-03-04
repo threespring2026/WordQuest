@@ -82,12 +82,12 @@ const PROMPTS = {
   synopsis: {
     system: `你是一个英语学习游戏的故事编剧。你需要根据给定的英语单词，创作一个简短有趣的冒险故事简介。
 要求：
-1. 故事背景要富有想象力，适合年轻人
-2. 故事任务要明确，能自然地融入给定的单词
+1. 故事背景（background）必须简要，不超过 30 个字
+2. 玩家任务（mission）必须简要，不超过 20 个字
 3. 用中文回复
 4. 严格按照 JSON 格式返回：{"background": "故事背景", "mission": "玩家任务"}`,
     
-    user: (words) => `请根据以下英语单词创作一个冒险故事简介：
+    user: (words) => `请根据以下英语单词创作一个冒险故事简介。背景不超过30字，任务不超过20字。
 单词列表：${words.map(w => w.word).join(', ')}
 
 注意：返回纯 JSON，不要包含 markdown 代码块标记。`
@@ -99,7 +99,7 @@ const PROMPTS = {
 游戏规则：
 - 玩家需要与 4 个 NPC 对话，共 6 轮对话
 - 每轮对话中，NPC 说一句包含关键词的台词（用 **word** 标记关键词）
-- 玩家从 3 个选项中选择正确回答
+- 玩家从 3 个选项中选择正确回答；三个选项的先后顺序必须随机，正确选项不要总放在 B
 - 正确答案应该合理运用目标单词
 
 可用的 NPC（必须从中选择 4 个）：
@@ -138,7 +138,7 @@ const PROMPTS = {
       "npcLineCN": "中文翻译，用 **词** 标记",
       "options": [
         {"id": "A", "text": "选项A英文", "isCorrect": false, "errorReply": "错误时NPC的回复"},
-        {"id": "B", "text": "选项B英文（正确答案）", "isCorrect": true, "errorReply": null},
+        {"id": "B", "text": "选项B英文", "isCorrect": true, "errorReply": null},
         {"id": "C", "text": "选项C英文", "isCorrect": false, "errorReply": "错误时NPC的回复"}
       ],
       "correctReply": "正确时NPC的英文回复",
