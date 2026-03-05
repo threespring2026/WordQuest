@@ -154,17 +154,38 @@ const API = (function() {
     },
 
     /**
-     * 查询单词释义（优先从本地词典查，再从 wordPack 查）
+     * 查询单词释义（本地词典 → 我的词库 → mock wordPack）
      * @param {string} word 
      */
     async lookupWord(word) {
-      // 先查本地词典（无网络延迟）
+      const key = (word || '').toLowerCase().trim();
+      if (!key) return null;
+
+      // 1. 先查内置词典
       const dictResult = dictLookup(word);
       if (dictResult) return dictResult;
 
-      // 再查 mock wordPack
+      // 2. 再查「我的词库」（localStorage）
+      try {
+        const userId = (typeof Store !== 'undefined' && Store.get('user')) ? Store.get('user').id : 'guest';
+        const saved = localStorage.getItem('wordquest_wordbook_' + userId);
+        if (saved) {
+          const myWordbook = JSON.parse(saved);
+          const found = myWordbook.find(w => (w.word || '').toLowerCase() === key);
+          if (found) {
+            return {
+              word:        key,
+              phonetic:    found.phonetic || '',
+              partOfSpeech: found.partOfSpeech || '',
+              definition:  found.definition || '（暂无释义）'
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 3. 再查 mock wordPack
       const found = MOCK_CONFIG.wordPack.find(w =>
-        w.word.toLowerCase() === word.toLowerCase()
+        (w.word || '').toLowerCase() === key
       );
       if (found) return found;
 
@@ -172,7 +193,7 @@ const API = (function() {
 
       // 未找到时返回占位数据
       return {
-        word:        word.toLowerCase(),
+        word:        key,
         phonetic:    '',
         partOfSpeech:'',
         definition:  '（暂无释义）'
