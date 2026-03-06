@@ -13,21 +13,62 @@ const StoryModule = (function() {
   let isGenerating = false;
   let regenerateCount = 0;
 
-  // 渲染页面：单词预热 + 生成中/开始冒险 按钮
+  // 渲染单词预热列表（与 result 单词回顾一致：单词 + 音标 + 释义，可滑动）
+  function renderWordWarmupList() {
+    return wordPack.map(w => `
+      <div class="p-3 bg-gray-50 rounded-lg">
+        <div class="flex justify-between items-start">
+          <span class="font-bold text-red-500">${w.word}</span>
+          <span class="text-gray-500 text-sm">${w.partOfSpeech || ''}</span>
+        </div>
+        <div class="text-gray-500 text-xs mt-1">${w.phonetic || ''}</div>
+        <div class="text-gray-700 text-sm mt-1">${w.definition || '（暂无释义）'}</div>
+      </div>
+    `).join('');
+  }
+
+  // 更新故事简介/任务/内容区域（生成完成后调用）
+  function updateSynopsisBlock() {
+    if (!synopsis) return;
+    const introEl = document.getElementById('story-intro-text');
+    const missionEl = document.getElementById('story-mission-text');
+    const contentEl = document.getElementById('story-content-text');
+    if (introEl) introEl.textContent = synopsis.background || '（无）';
+    if (missionEl) missionEl.textContent = synopsis.mission || '（无）';
+    if (contentEl) contentEl.textContent = synopsis.content || '根据背景与任务，在冒险中与多位角色对话，选择正确使用目标单词的选项完成关卡。';
+  }
+
+  // 渲染页面：故事简介/任务/内容 + 单词预热（详细可滑动）+ 生成中/开始冒险 按钮
   function render() {
+    const hasSynopsis = !!synopsis;
     container.innerHTML = `
       <div class="banner">
         <span class="banner-text pixel-font">词境历险</span>
       </div>
       
       <div class="flex-1 overflow-y-auto px-4 pb-4">
+        <!-- 故事简介 -->
+        <div class="card mb-3">
+          <h3 class="text-gray-800 font-bold mb-1 text-sm">故事简介</h3>
+          <p id="story-intro-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.background || '（无）') : '正在生成故事简介…'}</p>
+        </div>
+        <!-- 任务信息 -->
+        <div class="card mb-3">
+          <h3 class="text-gray-800 font-bold mb-1 text-sm">任务信息</h3>
+          <p id="story-mission-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.mission || '（无）') : '正在生成…'}</p>
+        </div>
+        <!-- 内容 -->
+        <div class="card mb-3">
+          <h3 class="text-gray-800 font-bold mb-1 text-sm">内容</h3>
+          <p id="story-content-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.content || '根据背景与任务，在冒险中与多位角色对话，选择正确使用目标单词的选项完成关卡。') : '生成后将显示冒险内容说明。'}</p>
+        </div>
+
+        <!-- 单词预热：详细列表（与结果页单词回顾一致，可滑动） -->
         <div class="card mb-4">
-          <h2 class="text-center text-gray-800 font-bold mb-1">单词预热</h2>
-          <p class="text-center text-gray-500 text-xs mb-3">利用等待时间熟悉单词，点击可查释义</p>
-          <div id="story-word-tags" class="flex flex-wrap justify-center gap-2">
-            ${wordPack.map(w => `
-              <span class="word-tag-display cursor-pointer" data-word="${w.word}">${w.word}</span>
-            `).join('')}
+          <h3 class="text-center text-gray-800 font-bold mb-1">单词预热</h3>
+          <p class="text-center text-gray-500 text-xs mb-3">利用等待时间熟悉单词</p>
+          <div id="story-word-warmup-list" class="space-y-3 max-h-64 overflow-y-auto">
+            ${renderWordWarmupList()}
           </div>
         </div>
         
@@ -83,6 +124,7 @@ const StoryModule = (function() {
       Store.set('session.synopsis', synopsis);
       EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
       setStartButtonReady();
+      updateSynopsisBlock();
     } catch (error) {
       console.error('Story generation failed:', error);
       showNetworkError(error.message || '网络断开：无法连接 AI 服务');
