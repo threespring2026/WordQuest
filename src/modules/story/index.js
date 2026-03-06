@@ -75,19 +75,9 @@ const StoryModule = (function() {
     startGeneration();
   }
 
-  // 绑定单词悬停提示
+  // 绑定单词点击 → 打开释义弹层
   function bindWordTooltips() {
-    document.querySelectorAll('.word-tag-display').forEach(el => {
-      const word = el.dataset.word;
-      const wordData = wordPack.find(w => w.word === word);
-      
-      if (wordData) {
-        el.addEventListener('mouseenter', (e) => {
-          UI.showWordTooltip(wordData, e.clientX, e.clientY);
-        });
-        el.addEventListener('mouseleave', UI.hideWordTooltip);
-      }
-    });
+    UI.bindWordClick(document.body);
   }
 
   // 开始生成故事

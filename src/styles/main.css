@@ -479,6 +479,14 @@ body {
   color: #333;
 }
 
+/* 单词释义弹层（点击打开，支持手机） */
+.word-detail-modal {
+  min-height: 120px;
+}
+.word-detail-modal .word-phonetic { font-size: 13px; }
+.word-detail-modal .word-definition { color: #333; line-height: 1.5; }
+#word-detail-close { min-width: 44px; min-height: 44px; } /* 触控友好 */
+
 /* ==================== 结算面板 ==================== */
 .result-panel {
   background: white;

@@ -505,26 +505,9 @@ const GameModule = (function() {
     return result;
   }
 
-  // 绑定所有单词的悬停提示
+  // 绑定单词点击 → 打开释义弹层（网络查词 + 缓存，支持手机）
   function bindAllWordTooltips() {
-    document.querySelectorAll('.word-hover').forEach(el => {
-      const word = el.dataset.word;
-      
-      // 先从 wordPack 查找
-      let wordData = wordPack.find(w => w.word.toLowerCase() === word);
-      
-      // 如果没找到，尝试异步查询
-      el.addEventListener('mouseenter', async (e) => {
-        if (!wordData) {
-          wordData = await API.lookupWord(word);
-        }
-        if (wordData) {
-          UI.showWordTooltip(wordData, e.clientX, e.clientY);
-        }
-      });
-      
-      el.addEventListener('mouseleave', UI.hideWordTooltip);
-    });
+    UI.bindWordClick(document.body);
   }
 
   // 渲染选项

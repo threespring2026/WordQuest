@@ -172,10 +172,7 @@ const UI = (function() {
     },
 
     /**
-     * 显示单词释义弹窗（显示在单词上方），4 秒后自动消失
-     * @param {Object} wordData - 单词数据
-     * @param {number} x - X 坐标（鼠标位置）
-     * @param {number} y - Y 坐标（鼠标位置）
+     * 显示单词释义弹窗（显示在单词上方），4 秒后自动消失（保留供兼容）
      */
     showWordTooltip(wordData, x, y) {
       if (this._wordTooltipTimer) {
@@ -184,77 +181,124 @@ const UI = (function() {
       }
       let tooltip = document.getElementById('word-tooltip');
       if (!tooltip) {
-        tooltip = this.createElement('div', {
-          id: 'word-tooltip',
-          className: 'word-tooltip hidden'
-        });
+        tooltip = this.createElement('div', { id: 'word-tooltip', className: 'word-tooltip hidden' });
         document.body.appendChild(tooltip);
       }
-
       tooltip.innerHTML = `
         <div class="word-title">${wordData.word}</div>
         <div class="word-phonetic">${wordData.phonetic || ''}</div>
         <div class="word-definition">${wordData.partOfSpeech || ''} ${wordData.definition}</div>
       `;
-
-      // 先临时显示以获取高度
       tooltip.style.visibility = 'hidden';
       tooltip.classList.remove('hidden');
       const tooltipH = tooltip.offsetHeight || 72;
       tooltip.style.visibility = '';
-
-      // 计算左侧位置，避免超出屏幕右边
       const left = Math.min(x, window.innerWidth - 220);
-
-      // 显示在鼠标上方；若空间不足则显示在下方
       let top = y - tooltipH - 8;
       if (top < 5) top = y + 20;
-
       tooltip.style.left = left + 'px';
-      tooltip.style.top  = top  + 'px';
-
-      this._wordTooltipTimer = setTimeout(() => {
-        this.hideWordTooltip();
-        this._wordTooltipTimer = null;
-      }, 4000);
+      tooltip.style.top = top + 'px';
+      this._wordTooltipTimer = setTimeout(() => { this.hideWordTooltip(); this._wordTooltipTimer = null; }, 4000);
     },
 
-    /**
-     * 隐藏单词释义弹窗
-     */
     hideWordTooltip() {
-      if (this._wordTooltipTimer) {
-        clearTimeout(this._wordTooltipTimer);
-        this._wordTooltipTimer = null;
-      }
+      if (this._wordTooltipTimer) { clearTimeout(this._wordTooltipTimer); this._wordTooltipTimer = null; }
       const tooltip = document.getElementById('word-tooltip');
-      if (tooltip) {
-        tooltip.classList.add('hidden');
-      }
+      if (tooltip) tooltip.classList.add('hidden');
     },
 
     /**
-     * 绑定关键词事件
-     * @param {HTMLElement} container - 容器元素
-     * @param {Array} wordPack - 单词包
+     * 点击单词：打开释义弹层（网络查词 + 缓存兜底），支持手机
+     * 防抖：同一词 300ms 内重复点击只触发一次
      */
-    bindKeywordEvents(container, wordPack) {
-      container.querySelectorAll('.keyword').forEach(el => {
-        const word = el.dataset.word;
-        const wordData = wordPack.find(w => w.word.toLowerCase() === word);
-        
-        if (wordData) {
-          el.addEventListener('mouseenter', (e) => {
-            this.showWordTooltip(wordData, e.clientX, e.clientY);
-          });
-          el.addEventListener('mouseleave', () => {
-            this.hideWordTooltip();
-          });
+    async showWordDetailModal(word) {
+      const key = (word || '').toLowerCase().trim();
+      if (!key) return;
+      if (this._wordDetailDebounce && this._wordDetailDebounce.key === key && Date.now() - this._wordDetailDebounce.at < 300) return;
+      this._wordDetailDebounce = { key, at: Date.now() };
+
+      let overlay = document.getElementById('word-detail-overlay');
+      if (!overlay) {
+        overlay = this.createElement('div', {
+          id: 'word-detail-overlay',
+          className: 'fixed inset-0 bg-black/50 flex items-center justify-center z-[1000] p-4 hidden'
+        });
+        overlay.innerHTML = `
+          <div id="word-detail-modal" class="word-detail-modal bg-white rounded-xl shadow-xl max-w-sm w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div class="flex items-center justify-between p-3 border-b">
+              <span id="word-detail-title" class="font-bold text-lg text-red-600">...</span>
+              <button type="button" id="word-detail-close" class="text-gray-500 hover:text-black text-2xl leading-none">&times;</button>
+            </div>
+            <div id="word-detail-body" class="p-3 overflow-y-auto flex-1 text-sm">
+              <div class="loader mx-auto my-4"></div>
+            </div>
+          </div>
+        `;
+        overlay.querySelector('#word-detail-close').onclick = () => this.hideWordDetailModal();
+        overlay.onclick = (e) => { if (e.target === overlay) this.hideWordDetailModal(); };
+        document.body.appendChild(overlay);
+      }
+
+      overlay.classList.remove('hidden');
+      document.getElementById('word-detail-title').textContent = key;
+      document.getElementById('word-detail-body').innerHTML = '<div class="loader mx-auto my-4"></div>';
+
+      let wordData;
+      try {
+        wordData = await API.lookupWord(key);
+      } catch (_) {
+        wordData = { word: key, phonetic: '', partOfSpeech: '', definition: '（暂无释义）', networkUnavailable: true };
+      }
+
+      if (wordData.networkUnavailable) {
+        this.showToast('网络不可用', 'error');
+      }
+      const def = wordData.definition || '（暂无释义）';
+      const sub = wordData.notFound ? '<p class="text-amber-600 mt-1">未找到释义</p>' : '';
+      const exHtml = (wordData.examples && wordData.examples.length)
+        ? '<div class="mt-2 text-gray-600"><div class="font-medium mb-1">例句</div><ul class="list-disc pl-4 space-y-0.5">' +
+          wordData.examples.slice(0, 3).map(ex => `<li>${escapeHtml(ex)}</li>`).join('') + '</ul></div>'
+        : '';
+      document.getElementById('word-detail-body').innerHTML = `
+        <div class="word-phonetic text-gray-600 mb-1">${escapeHtml(wordData.phonetic || '')}</div>
+        <div class="word-definition">${escapeHtml(wordData.partOfSpeech ? wordData.partOfSpeech + ' ' : '')}${escapeHtml(def)}</div>
+        ${sub}
+        ${exHtml}
+      `;
+    },
+
+    hideWordDetailModal() {
+      const overlay = document.getElementById('word-detail-overlay');
+      if (overlay) overlay.classList.add('hidden');
+    },
+
+    /**
+     * 绑定可点击单词（.word-hover, .keyword, .word-tag-display, .word-review-tag）→ 点击打开释义弹层
+     */
+    bindWordClick(container) {
+      const sel = container || document;
+      ['word-hover', 'keyword', 'word-tag-display', 'word-review-tag'].forEach(cls => {
+        sel.querySelectorAll('.' + cls).forEach(el => {
+          const word = el.dataset.word;
+          if (!word) return;
           el.addEventListener('click', (e) => {
-            this.showWordTooltip(wordData, e.clientX, e.clientY);
+            e.preventDefault();
+            e.stopPropagation();
+            this.showWordDetailModal(word);
           });
-        }
+        });
       });
+    },
+
+    bindKeywordEvents(container, wordPack) {
+      this.bindWordClick(container || document);
     }
   };
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
 })();

@@ -6,7 +6,79 @@
 const API = (function() {
   // 模拟网络延迟
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-  
+
+  /** 解析 Free Dictionary API 返回为统一格式（entries[].pronunciations, senses） */
+  function parseFreeDictResponse(wordKey, data) {
+    if (!data || typeof data !== 'object') return null;
+    const entries = data.entries || (Array.isArray(data) ? data : [data]);
+    const first = entries[0];
+    if (!first) return null;
+    let phonetic = '';
+    if (first.pronunciations && first.pronunciations.length) {
+      const p = first.pronunciations.find(x => x.text) || first.pronunciations[0];
+      phonetic = (p && p.text) || '';
+    }
+    const partOfSpeech = first.partOfSpeech || '';
+    const senses = first.senses || [];
+    const def = senses[0];
+    const definition = def && def.definition ? def.definition : '';
+    const examples = [];
+    if (def && Array.isArray(def.examples)) examples.push(...def.examples);
+    senses.slice(0, 3).forEach(s => {
+      if (s.examples && Array.isArray(s.examples)) examples.push(...s.examples);
+    });
+    return {
+      word: wordKey,
+      phonetic: phonetic,
+      partOfSpeech: partOfSpeech,
+      definition: definition || '（暂无释义）',
+      examples: examples.length ? examples.slice(0, 5) : undefined
+    };
+  }
+
+  function getPersistentWordCache(wordKey, cacheKey) {
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      const key = wordKey.toLowerCase();
+      return obj[key] ? obj[key].data : null;
+    } catch { return null; }
+  }
+
+  function setPersistentWordCache(wordKey, data, cacheKey, maxSize) {
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      const obj = raw ? JSON.parse(raw) : {};
+      const key = wordKey.toLowerCase();
+      const keys = Object.keys(obj);
+      if (keys.length >= maxSize && !obj[key]) {
+        const oldest = keys.reduce((a, b) => obj[a].at < obj[b].at ? a : b);
+        delete obj[oldest];
+      }
+      obj[key] = { data: { ...data }, at: Date.now() };
+      localStorage.setItem(cacheKey, JSON.stringify(obj));
+    } catch (_) {}
+  }
+
+  function getMyWordbookSnapshot(wordKey) {
+    try {
+      const userId = (typeof Store !== 'undefined' && Store.get('user')) ? Store.get('user').id : 'guest';
+      const saved = localStorage.getItem('wordquest_wordbook_' + userId);
+      if (!saved) return null;
+      const list = JSON.parse(saved);
+      const found = list.find(w => (w.word || '').toLowerCase() === wordKey.toLowerCase());
+      if (!found) return null;
+      return {
+        word: found.word,
+        phonetic: found.phonetic || '',
+        partOfSpeech: found.partOfSpeech || '',
+        definition: found.definition || '（暂无释义）',
+        examples: found.examples
+      };
+    } catch { return null; }
+  }
+
   // 本地用户数据存储 key
   const USERS_KEY = 'wordquest_users';
   
@@ -154,50 +226,67 @@ const API = (function() {
     },
 
     /**
-     * 查询单词释义（本地词典 → 我的词库 → mock wordPack）
-     * @param {string} word 
+     * 查询单词释义（网络优先 + 内存/持久缓存 + 我的词库快照 + 兜底）
+     * 顺序：内存缓存 → Free Dictionary API → 持久缓存 → 我的词库快照 → 占位（并标记 networkUnavailable）
+     * @param {string} word
+     * @returns {Promise<{word, phonetic, partOfSpeech, definition, examples?, networkUnavailable?, notFound?}>}
      */
     async lookupWord(word) {
       const key = (word || '').toLowerCase().trim();
       if (!key) return null;
 
-      // 1. 先查内置词典
-      const dictResult = dictLookup(word);
-      if (dictResult) return dictResult;
+      const CACHE_KEY = 'wordquest_word_cache';
+      const CACHE_MAX = 200;
 
-      // 2. 再查「我的词库」（localStorage）
+      // 1. 内存缓存
+      if (!this._wordMemoryCache) this._wordMemoryCache = new Map();
+      const mem = this._wordMemoryCache.get(key);
+      if (mem) return mem;
+
+      // 2. 网络请求 Free Dictionary API
       try {
-        const userId = (typeof Store !== 'undefined' && Store.get('user')) ? Store.get('user').id : 'guest';
-        const saved = localStorage.getItem('wordquest_wordbook_' + userId);
-        if (saved) {
-          const myWordbook = JSON.parse(saved);
-          const found = myWordbook.find(w => (w.word || '').toLowerCase() === key);
-          if (found) {
-            return {
-              word:        key,
-              phonetic:    found.phonetic || '',
-              partOfSpeech: found.partOfSpeech || '',
-              definition:  found.definition || '（暂无释义）'
-            };
+        const url = `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(key)}`;
+        const res = await fetch(url, { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          const parsed = parseFreeDictResponse(key, data);
+          if (parsed) {
+            this._wordMemoryCache.set(key, parsed);
+            setPersistentWordCache(key, parsed, CACHE_KEY, CACHE_MAX);
+            return parsed;
           }
+        }
+        if (res.status === 404) {
+          const notFoundResult = { word: key, phonetic: '', partOfSpeech: '', definition: '（未找到释义）', notFound: true };
+          this._wordMemoryCache.set(key, notFoundResult);
+          return notFoundResult;
         }
       } catch (_) {}
 
-      // 3. 再查 mock wordPack
-      const found = MOCK_CONFIG.wordPack.find(w =>
-        (w.word || '').toLowerCase() === key
-      );
-      if (found) return found;
+      // 3. 持久缓存
+      const cached = getPersistentWordCache(key, CACHE_KEY);
+      if (cached) {
+        this._wordMemoryCache.set(key, cached);
+        return cached;
+      }
 
-      await delay(50);
+      // 4. 我的词库快照
+      const snapshot = getMyWordbookSnapshot(key);
+      if (snapshot) {
+        this._wordMemoryCache.set(key, snapshot);
+        return snapshot;
+      }
 
-      // 未找到时返回占位数据
-      return {
-        word:        key,
-        phonetic:    '',
-        partOfSpeech:'',
-        definition:  '（暂无释义）'
+      // 5. 兜底：网络不可用且无缓存
+      const fallback = {
+        word: key,
+        phonetic: '',
+        partOfSpeech: '',
+        definition: '（暂无释义）',
+        networkUnavailable: true
       };
+      this._wordMemoryCache.set(key, fallback);
+      return fallback;
     },
 
     /**

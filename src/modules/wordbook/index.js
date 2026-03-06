@@ -14,12 +14,25 @@ const WordbookModule = (function() {
   let pendingWord  = null; // 添加单词页面查到的待选单词
   let quickSuggestions = []; // 试试这些单词列表（随机抽取）
 
+  /** 从 wordData 生成词库快照（含 updatedAt，不存 networkUnavailable/notFound） */
+  function toWordbookSnapshot(wordData) {
+    const snap = {
+      word: wordData.word,
+      phonetic: wordData.phonetic || '',
+      partOfSpeech: wordData.partOfSpeech || '',
+      definition: wordData.definition || '（暂无释义）',
+      familiarity: wordData.familiarity ?? 0,
+      updatedAt: new Date().toISOString()
+    };
+    if (wordData.examples && wordData.examples.length) snap.examples = wordData.examples;
+    return snap;
+  }
+
   /* ===== localStorage ===== */
   function loadMyWordbook() {
     const userId = Store.get('user')?.id || 'guest';
     const saved = localStorage.getItem(`wordquest_wordbook_${userId}`);
     myWordbook = saved ? JSON.parse(saved) : [];
-    // 保证每个词有 familiarity 字段
     myWordbook.forEach(w => { if (w.familiarity === undefined) w.familiarity = 0; });
   }
 
@@ -241,9 +254,9 @@ const WordbookModule = (function() {
     try {
       const wordData = await API.lookupWord(wordStr);
       UI.hideLoading();
+      if (wordData.networkUnavailable) UI.showToast('网络不可用', 'error');
       pendingWord = { ...wordData, familiarity: 0 };
       render();
-      // 聚焦到结果
       document.getElementById('lookup-result')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) {
       UI.hideLoading();
@@ -251,14 +264,14 @@ const WordbookModule = (function() {
     }
   }
 
-  /* ===== 存入词库 ===== */
+  /* ===== 存入词库（快照含 phonetic/definition/updatedAt） ===== */
   function savePendingToBook() {
     if (!pendingWord) return;
     if (myWordbook.some(w => w.word === pendingWord.word)) {
       UI.showToast('该单词已在词库中', 'info');
       return;
     }
-    myWordbook.push({ ...pendingWord, familiarity: 0 });
+    myWordbook.push(toWordbookSnapshot({ ...pendingWord, familiarity: 0 }));
     saveMyWordbook();
     UI.showToast(`已加入词库: ${pendingWord.word}`, 'success');
     render();
@@ -273,9 +286,9 @@ const WordbookModule = (function() {
       UI.showToast('最多选择10个单词', 'info');
       return false;
     } else {
-      // 若词库中没有此词，自动添加
+      // 若词库中没有此词，自动添加（存快照）
       if (!myWordbook.some(w => w.word === wordData.word)) {
-        myWordbook.push({ ...wordData, familiarity: 0 });
+        myWordbook.push(toWordbookSnapshot({ ...wordData, familiarity: 0 }));
         saveMyWordbook();
       }
       selectedWords.push(wordData);
