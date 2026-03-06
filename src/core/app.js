@@ -34,6 +34,12 @@ const App = (function() {
         console.log('✅ WordQuest Ready!');
         return;
       }
+      if (location.hash === '#admin') {
+        Router.go('admin');
+        initialized = true;
+        console.log('✅ WordQuest Ready!');
+        return;
+      }
 
       // 检查用户登录状态，决定初始场景
       const isLoggedIn = Store.get('isLoggedIn');
@@ -68,6 +74,9 @@ const App = (function() {
       }
       if (typeof MapEditorModule !== 'undefined') {
         Router.register('mapEditor', MapEditorModule);
+      }
+      if (typeof AdminModule !== 'undefined') {
+        Router.register('admin', AdminModule);
       }
     },
 

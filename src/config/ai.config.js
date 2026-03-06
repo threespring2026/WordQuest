@@ -1,23 +1,15 @@
 /**
  * AI API 配置
- * 硅基流动 DeepSeek V3.2 接入
+ * API Key 由 ai.env.js 注入（Vercel 环境变量 WORDQUEST_API_KEY）
+ * 其余配置可在管理页 #admin 中覆盖，存于 localStorage
  */
 
 const AI_CONFIG = {
-  // API 地址
   baseUrl: 'https://api.siliconflow.cn/v1/chat/completions',
-  
-  // API Key（硅基流动）
-  apiKey: 'sk-iombwgutxbgihmxzihkrmtjvandkmwtgehbmnthdkrsbhetm',
-  
-  // 模型名称
+  apiKey: '', // 由 ai.env.js 的 window.WORDQUEST_API_KEY 或管理页不提供
   model: 'Qwen/Qwen2.5-72B-Instruct',
-  
-  // 生成参数
   temperature: 0.8,
   maxTokens: 4096,
-  
-  // 是否启用真实 AI（false 时使用 Mock 数据）
   enabled: true
 };
 
@@ -30,6 +22,9 @@ const AI_CONFIG = {
 async function callAI(systemPrompt, userPrompt) {
   if (!AI_CONFIG.enabled) {
     throw new Error('AI 功能已禁用');
+  }
+  if (!AI_CONFIG.apiKey || !AI_CONFIG.apiKey.trim()) {
+    throw new Error('未配置 API Key：请在 Vercel 环境变量中设置 WORDQUEST_API_KEY，或本地在管理页 #admin 中填写并保存');
   }
 
   let response;
@@ -158,6 +153,58 @@ ${words.map(w => `- ${w.word}（${w.definition}）`).join('\n')}
   }
 };
 
+/** 管理页「恢复默认」用 */
+const DEFAULT_SYNOPSIS_SYSTEM = PROMPTS.synopsis.system;
+const DEFAULT_STORYCONFIG_SYSTEM = PROMPTS.storyConfig.system;
+const DEFAULT_PROMPT_TEMPLATES = {
+  synopsisUser: `请根据以下英语单词创作一个冒险故事简介。背景不超过30字，任务不超过20字。
+单词列表：{{WORDS}}
+
+注意：返回纯 JSON，不要包含 markdown 代码块标记。`,
+  storyConfigUser: `故事简介：
+背景：{{SYNOPSIS_BACKGROUND}}
+任务：{{SYNOPSIS_MISSION}}
+
+必须使用的单词（每个单词至少在对话中出现 1 次，用 **word** 格式标记）：
+{{WORDS_LINES}}
+
+请设计 6 轮对话，确保每个单词都被使用。返回纯 JSON。`
+};
+
+function applyAdminOverlay() {
+  try {
+    const raw = typeof localStorage !== 'undefined' && localStorage.getItem('wordquest_admin_config');
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o.baseUrl !== undefined) AI_CONFIG.baseUrl = o.baseUrl;
+    if (o.model !== undefined) AI_CONFIG.model = o.model;
+    if (!AI_CONFIG.apiKey && o.apiKey) AI_CONFIG.apiKey = o.apiKey;
+    if (o.temperature !== undefined) AI_CONFIG.temperature = Number(o.temperature);
+    if (o.maxTokens !== undefined) AI_CONFIG.maxTokens = Number(o.maxTokens);
+    if (o.enabled !== undefined) AI_CONFIG.enabled = !!o.enabled;
+    if (o.synopsisSystem !== undefined) PROMPTS.synopsis.system = o.synopsisSystem;
+    if (o.synopsisUserTemplate !== undefined) {
+      PROMPTS.synopsis.user = function(words) {
+        return o.synopsisUserTemplate.replace('{{WORDS}}', words.map(function(w) { return w.word; }).join(', '));
+      };
+    }
+    if (o.storyConfigSystem !== undefined) PROMPTS.storyConfig.system = o.storyConfigSystem;
+    if (o.storyConfigUserTemplate !== undefined) {
+      PROMPTS.storyConfig.user = function(words, synopsis) {
+        return o.storyConfigUserTemplate
+          .replace('{{SYNOPSIS_BACKGROUND}}', synopsis.background || '')
+          .replace('{{SYNOPSIS_MISSION}}', synopsis.mission || '')
+          .replace('{{WORDS_LINES}}', words.map(function(w) { return '- ' + w.word + '（' + (w.definition || '') + '）'; }).join('\n'));
+      };
+    }
+  } catch (e) { console.warn('applyAdminOverlay:', e); }
+}
+
+if (typeof window !== 'undefined' && window.WORDQUEST_API_KEY) {
+  AI_CONFIG.apiKey = window.WORDQUEST_API_KEY;
+}
+applyAdminOverlay();
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { AI_CONFIG, callAI, PROMPTS };
+  module.exports = { AI_CONFIG, callAI, PROMPTS, DEFAULT_PROMPT_TEMPLATES, DEFAULT_SYNOPSIS_SYSTEM, DEFAULT_STORYCONFIG_SYSTEM };
 }
