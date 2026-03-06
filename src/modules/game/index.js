@@ -139,17 +139,15 @@ const GameModule = (function() {
     const mapConfig = API.getMapConfig(storyConfig.mapId);
     const user = Store.get('user');
     
+    const synopsis = Store.get('session.synopsis') || {};
+    const missionText = synopsis.mission ? ` · ${synopsis.mission}` : '';
     container.innerHTML = `
-      <!-- 顶部：软件名称 + 操作按钮 -->
-      <div class="bg-white px-4 py-2 flex justify-between items-center border-b">
-        <div class="font-bold text-gray-800 pixel-font">词境历险</div>
-        <div class="flex gap-2">
-          <button id="btn-bgm" class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">
-            🔊
-          </button>
-          <button id="btn-quit" class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">
-            ✕
-          </button>
+      <!-- 顶部：软件名称 + 任务简报（置于对话之上，保证退出可点） -->
+      <div class="game-top-bar bg-white px-4 py-2 flex justify-between items-center border-b shrink-0">
+        <div class="font-bold text-gray-800 pixel-font text-sm truncate flex-1 mr-2" title="词境历险${missionText}">词境历险${missionText}</div>
+        <div class="flex gap-2 shrink-0">
+          <button id="btn-bgm" class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">🔊</button>
+          <button id="btn-quit" class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">✕</button>
         </div>
       </div>
       
@@ -165,6 +163,7 @@ const GameModule = (function() {
         <div id="npc-dialogue" class="mb-4"></div>
         <div id="player-options"></div>
       </div>
+      <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
     `;
 
     // 等待图片加载后初始化地图

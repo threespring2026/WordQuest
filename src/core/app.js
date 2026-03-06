@@ -34,12 +34,25 @@ const App = (function() {
         console.log('✅ WordQuest Ready!');
         return;
       }
+      if (location.hash === '#admin') {
+        Router.go('admin');
+        initialized = true;
+        console.log('✅ WordQuest Ready!');
+        return;
+      }
 
-      // 检查用户登录状态，决定初始场景
+      // 首次打开显示欢迎页，再进登录
+      try {
+        if (!sessionStorage.getItem('wordquest_welcome_shown')) {
+          Router.go('welcome');
+          initialized = true;
+          console.log('✅ WordQuest Ready!');
+          return;
+        }
+      } catch (_) {}
+
       const isLoggedIn = Store.get('isLoggedIn');
       const initialScene = isLoggedIn ? 'wordbook' : 'auth';
-
-      // 启动初始场景
       Router.go(initialScene);
 
       initialized = true;
@@ -68,6 +81,12 @@ const App = (function() {
       }
       if (typeof MapEditorModule !== 'undefined') {
         Router.register('mapEditor', MapEditorModule);
+      }
+      if (typeof AdminModule !== 'undefined') {
+        Router.register('admin', AdminModule);
+      }
+      if (typeof WelcomeModule !== 'undefined') {
+        Router.register('welcome', WelcomeModule);
       }
     },
 

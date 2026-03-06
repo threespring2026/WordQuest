@@ -57,7 +57,7 @@ const ResultModule = (function() {
     
     container.innerHTML = `
       <div class="banner">
-        <span class="banner-text pixel-font">WORDQUEST</span>
+        <span class="banner-text pixel-font">词境历险</span>
       </div>
       
       <div class="flex-1 flex flex-col items-center justify-center px-4 overflow-y-auto">
@@ -122,6 +122,7 @@ const ResultModule = (function() {
           </div>
         </div>
       </div>
+      <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
       
       <!-- 单词复习弹窗 -->
       <div id="review-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">

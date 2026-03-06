@@ -107,6 +107,7 @@ const MapEditorModule = (function() {
           <button id="map-editor-copy" class="mt-1 text-sm text-blue-600">复制到剪贴板</button>
         </div>
       </div>
+      <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
     `;
 
     bindEvents();

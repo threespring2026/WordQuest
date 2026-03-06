@@ -35,7 +35,7 @@ const AuthModule = (function() {
   function renderAuthForm() {
     container.innerHTML = `
       <div class="banner">
-        <span class="banner-text pixel-font">WORDQUEST</span>
+        <span class="banner-text pixel-font">词境历险</span>
       </div>
       
       <div class="flex-1 overflow-y-auto px-4 pb-4">
@@ -109,6 +109,7 @@ const AuthModule = (function() {
           </button>
         </div>
       </div>
+      <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
     `;
 
     bindAuthEvents();
@@ -122,7 +123,7 @@ const AuthModule = (function() {
     
     container.innerHTML = `
       <div class="banner">
-        <span class="banner-text pixel-font">WORDQUEST</span>
+        <span class="banner-text pixel-font">词境历险</span>
       </div>
       
       <div class="flex-1 overflow-y-auto px-4 pb-4">
@@ -192,6 +193,7 @@ const AuthModule = (function() {
         </button>
       </div>
       ` : ''}
+      <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
     `;
 
     bindProfileEvents(user);

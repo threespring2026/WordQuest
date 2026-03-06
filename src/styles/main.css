@@ -105,6 +105,11 @@ body {
   letter-spacing: 2px;
 }
 
+.app-footer {
+  flex-shrink: 0;
+  padding: 8px;
+}
+
 /* ==================== 3D 按钮 ==================== */
 .btn-3d {
   border: none;
@@ -437,6 +442,12 @@ body {
 }
 
 /* ==================== 对话面板 ==================== */
+/* 游戏顶栏始终在对话之上，避免退出按钮被挡 */
+.game-top-bar {
+  position: relative;
+  z-index: 200;
+}
+
 #dialogue-panel {
   position: absolute;
   bottom: 0;
