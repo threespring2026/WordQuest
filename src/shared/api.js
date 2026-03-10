@@ -304,24 +304,37 @@ const API = (function() {
 
     // ==================== 故事生成 ====================
 
+    /** 根据难度返回故事生成用的词汇范围前缀 */
+    _getDifficultyPrefix(difficulty) {
+      const m = {
+        elementary: '【词汇难度：中国小学英语单词量水平。故事与台词用词请控制在此范围内，尽量简单常用。】\n\n',
+        intermediate: '【词汇难度：大学英语六级（CET-6）单词水平。故事与台词用词可在此范围内。】\n\n',
+        advanced: '【词汇难度：雅思（IELTS）单词水平。故事与台词用词可偏学术、丰富。】\n\n'
+      };
+      return m[difficulty] || m.intermediate;
+    },
+
     /**
      * 生成故事简介
      * @param {Array} words - 单词列表
+     * @param {string} difficulty - elementary | intermediate | advanced
      */
-    async generateSynopsis(words) {
+    async generateSynopsis(words, difficulty = 'intermediate') {
       // 使用 Mock 数据模式
       if (Store.get('settings.useMockAI')) {
         await delay(1500);
         return MOCK_CONFIG.synopsis;
       }
       
-      // 调用真实 AI
+      const prefix = this._getDifficultyPrefix(difficulty);
+      const userMessage = prefix + PROMPTS.synopsis.user(words);
+      
       console.log('🤖 正在调用 AI 生成故事简介...');
       
       try {
         const response = await callAI(
           PROMPTS.synopsis.system,
-          PROMPTS.synopsis.user(words)
+          userMessage
         );
         
         // 解析 JSON（移除可能的 markdown 代码块标记）
@@ -340,21 +353,24 @@ const API = (function() {
      * 生成完整故事配置
      * @param {Array} words - 单词列表
      * @param {Object} synopsis - 故事简介
+     * @param {string} difficulty - elementary | intermediate | advanced
      */
-    async generateStoryConfig(words, synopsis) {
+    async generateStoryConfig(words, synopsis, difficulty = 'intermediate') {
       // 使用 Mock 数据模式
       if (Store.get('settings.useMockAI')) {
         await delay(2000);
         return MOCK_CONFIG.storyConfig;
       }
       
-      // 调用真实 AI
+      const prefix = this._getDifficultyPrefix(difficulty);
+      const userMessage = prefix + PROMPTS.storyConfig.user(words, synopsis);
+      
       console.log('🤖 正在调用 AI 生成完整剧本...');
       
       try {
         const response = await callAI(
           PROMPTS.storyConfig.system,
-          PROMPTS.storyConfig.user(words, synopsis)
+          userMessage
         );
         
         // 解析 JSON（移除可能的 markdown 代码块标记）

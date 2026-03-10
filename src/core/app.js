@@ -113,6 +113,7 @@ const App = (function() {
       // 游戏开始
       EventBus.on(Events.GAME_START, (data) => {
         Store.set('session.wordPack', data.wordPack);
+        Store.set('session.difficulty', data.difficulty || 'intermediate');
         Store.set('session.startTime', Date.now());
         Router.go('story');
       });

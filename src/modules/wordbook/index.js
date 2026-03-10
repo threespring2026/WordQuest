@@ -13,6 +13,7 @@ const WordbookModule = (function() {
   let pendingWord  = null; // 添加单词页面查到的待选单词
   let queriedWords = [];   // 单词选择列表：仅包含本次会话查询过的单词
   let invalidQueryWord = null; // 最近一次未找到释义的查询（仅做提示，不入词库、不可选）
+  let difficulty = 'intermediate'; // 难度：elementary | intermediate | advanced
 
   /** 从 wordData 生成词库快照（含 updatedAt，不存 networkUnavailable/notFound） */
   function toWordbookSnapshot(wordData) {
@@ -136,12 +137,22 @@ const WordbookModule = (function() {
         </div>
       </div>
 
-      <!-- 底部按钮 -->
+      <!-- 底部按钮 + 难度选择 -->
       <div class="p-4 space-y-2">
-        <button id="btn-start-game" class="btn-3d btn-green w-full"
-          ${selectedWords.length < 3 ? 'disabled' : ''}>
-          开始冒险 (${selectedWords.length}/10)
-        </button>
+        <div class="flex gap-2 items-stretch">
+          <button id="btn-start-game" class="btn-3d btn-green flex-1 shrink-0"
+            ${selectedWords.length < 3 ? 'disabled' : ''}>
+            开始冒险 (${selectedWords.length}/10)
+          </button>
+          <div class="flex rounded-lg overflow-hidden border border-gray-200 shrink-0" role="group" aria-label="难度">
+            <button type="button" class="difficulty-option px-2 py-2 text-xs font-medium min-w-[52px] transition-colors
+              ${difficulty === 'elementary' ? 'bg-blue-400 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}" data-difficulty="elementary">初级</button>
+            <button type="button" class="difficulty-option px-2 py-2 text-xs font-medium min-w-[52px] transition-colors
+              ${difficulty === 'intermediate' ? 'bg-blue-400 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}" data-difficulty="intermediate">中级</button>
+            <button type="button" class="difficulty-option px-2 py-2 text-xs font-medium min-w-[52px] transition-colors
+              ${difficulty === 'advanced' ? 'bg-blue-400 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200'}" data-difficulty="advanced">高级</button>
+          </div>
+        </div>
         <button id="btn-back" class="btn-3d btn-gray w-full">← 返回</button>
       </div>
       <div class="app-footer text-center text-gray-400 text-xs py-2">「TriSpring互娱」版权所有</div>
@@ -393,7 +404,7 @@ const WordbookModule = (function() {
     if (user && user.tier !== 'vip' && !user.isGuest) {
       Store.set('user.gamesRemaining', Math.max(0, (user.gamesRemaining || 0) - 1));
     }
-    EventBus.emit(Events.GAME_START, { wordPack: selectedWords });
+    EventBus.emit(Events.GAME_START, { wordPack: selectedWords, difficulty });
   }
 
   /* ===== 绑定事件 ===== */
@@ -448,6 +459,14 @@ const WordbookModule = (function() {
     // 开始冒险 / 返回
     document.getElementById('btn-start-game')?.addEventListener('click', startGame);
     document.getElementById('btn-back')?.addEventListener('click', () => Router.back());
+
+    // 难度滑块
+    document.querySelectorAll('.difficulty-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        difficulty = btn.dataset.difficulty;
+        render();
+      });
+    });
   }
 
   /* ===== 单词选择列表事件：勾选即进入选择 ===== */
@@ -484,6 +503,7 @@ const WordbookModule = (function() {
       pendingWord   = null;
       queriedWords  = [];
       invalidQueryWord = null;
+      difficulty = 'intermediate';
       currentTab = 'add';
       render();
       EventBus.emit(Events.SCENE_READY, { scene: 'wordbook' });

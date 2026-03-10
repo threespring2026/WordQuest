@@ -188,9 +188,10 @@ const StoryModule = (function() {
     setStartButtonGenerating();
 
     try {
+      const difficultyLevel = Store.get('session.difficulty') || 'intermediate';
       EventBus.emit(Events.STORY_GENERATE_START, { step: 'synopsis' });
-      synopsis = await API.generateSynopsis(wordPack);
-      storyConfig = await API.generateStoryConfig(wordPack, synopsis);
+      synopsis = await API.generateSynopsis(wordPack, difficultyLevel);
+      storyConfig = await API.generateStoryConfig(wordPack, synopsis, difficultyLevel);
 
       Store.set('session.synopsis', synopsis);
       EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
