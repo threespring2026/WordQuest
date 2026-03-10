@@ -12,6 +12,58 @@ const StoryModule = (function() {
   let storyConfig = null;
   let isGenerating = false;
   let regenerateCount = 0;
+  let progressTimerId = null;
+  let currentProgress = 0;
+
+  /** 进度条速度：数值越大跑得越快，默认 0.1 约为原来的 1/10 速度，改为 1 则恢复原速 */
+  const PROGRESS_SPEED = 0.1;
+  /** 进度条刷新间隔（毫秒），越大越省资源、观感越平滑 */
+  const PROGRESS_TICK_MS = 400;
+
+  // 进度区间与展示文案
+  const PROGRESS_STEPS = [
+    { min: 0, max: 15, text: '☕ 主编已签收单词，灵感咖啡研磨中...' },
+    { min: 16, max: 35, text: '🤝 正在说服顽固单词，劝它们乖乖排队。' },
+    { min: 36, max: 55, text: '🥣 词义下锅，故事浓汤文火慢炖中。' },
+    { min: 56, max: 75, text: '✨ 文学之神降临，正往句子缝隙注入灵魂。' },
+    { min: 76, max: 95, text: '🎭 校对完毕，正给台词撒上闪亮的金粉。' },
+    { min: 96, max: 100, text: '📜 手稿墨迹已干，文学杰作火速送达！' }
+  ];
+
+  function getProgressText(percent) {
+    const step = PROGRESS_STEPS.find(s => percent >= s.min && percent <= s.max);
+    return step ? step.text : PROGRESS_STEPS[0].text;
+  }
+
+  function updateProgressUI(percent) {
+    const wrap = document.getElementById('story-progress-wrap');
+    const bar = document.getElementById('story-progress-bar');
+    const textEl = document.getElementById('story-progress-text');
+    if (!wrap || !bar || !textEl) return;
+    const pct = Math.min(100, Math.max(0, Math.round(percent)));
+    bar.style.width = pct + '%';
+    textEl.textContent = getProgressText(pct);
+  }
+
+  function startProgressAnimation() {
+    currentProgress = 0;
+    updateProgressUI(0);
+    if (progressTimerId) clearInterval(progressTimerId);
+    progressTimerId = setInterval(() => {
+      if (currentProgress >= 95) return;
+      const step = ((95 - currentProgress) * 0.12 + 1) * PROGRESS_SPEED;
+      currentProgress += step;
+      if (currentProgress > 95) currentProgress = 95;
+      updateProgressUI(currentProgress);
+    }, PROGRESS_TICK_MS);
+  }
+
+  function stopProgressAnimation() {
+    if (progressTimerId) {
+      clearInterval(progressTimerId);
+      progressTimerId = null;
+    }
+  }
 
   // 渲染单词预热列表（与 result 单词回顾一致：单词 + 音标 + 释义，可滑动）
   function renderWordWarmupList() {
@@ -78,9 +130,15 @@ const StoryModule = (function() {
         <div id="story-error-area" class="hidden"></div>
       </div>
       
-      <div class="p-4">
-        <button id="story-start-btn" class="btn-3d w-full bg-gray-300 text-gray-500 cursor-not-allowed" disabled>
-          正在生成故事
+      <div class="p-4 space-y-2">
+        <div id="story-progress-wrap" class="w-full">
+          <div class="h-3 bg-gray-200 rounded-full overflow-hidden mb-2">
+            <div id="story-progress-bar" class="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <p id="story-progress-text" class="text-center text-gray-600 text-sm min-h-[1.5rem]">☕ 主编已签收单词，灵感咖啡研磨中...</p>
+        </div>
+        <button id="story-start-btn" class="btn-3d btn-green w-full hidden" disabled>
+          开始冒险
         </button>
       </div>
       
@@ -93,19 +151,29 @@ const StoryModule = (function() {
   }
 
   function setStartButtonReady() {
+    stopProgressAnimation();
+    currentProgress = 100;
+    updateProgressUI(100);
+    const wrap = document.getElementById('story-progress-wrap');
     const btn = document.getElementById('story-start-btn');
-    if (!btn) return;
-    btn.disabled = false;
-    btn.textContent = '开始冒险';
-    btn.className = 'btn-3d btn-green w-full';
+    if (wrap) wrap.classList.add('hidden');
+    if (btn) {
+      btn.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = '开始冒险';
+      btn.className = 'btn-3d btn-green w-full';
+    }
   }
 
   function setStartButtonGenerating() {
+    const wrap = document.getElementById('story-progress-wrap');
     const btn = document.getElementById('story-start-btn');
-    if (!btn) return;
-    btn.disabled = true;
-    btn.textContent = '正在生成故事';
-    btn.className = 'btn-3d w-full bg-gray-300 text-gray-500 cursor-not-allowed';
+    if (wrap) wrap.classList.remove('hidden');
+    if (btn) {
+      btn.classList.add('hidden');
+      btn.disabled = true;
+    }
+    startProgressAnimation();
   }
 
   // 绑定单词点击 → 打开释义弹层
@@ -126,10 +194,17 @@ const StoryModule = (function() {
 
       Store.set('session.synopsis', synopsis);
       EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
-      setStartButtonReady();
-      updateSynopsisBlock();
+      stopProgressAnimation();
+      updateProgressUI(100);
+      const textEl = document.getElementById('story-progress-text');
+      if (textEl) textEl.textContent = getProgressText(100);
+      setTimeout(() => {
+        setStartButtonReady();
+        updateSynopsisBlock();
+      }, 600);
     } catch (error) {
       console.error('Story generation failed:', error);
+      stopProgressAnimation();
       showNetworkError(error.message || '网络断开：无法连接 AI 服务');
     } finally {
       isGenerating = false;
@@ -154,12 +229,12 @@ const StoryModule = (function() {
         <button id="story-btn-retry" class="btn-3d btn-blue flex-1">重试</button>
       </div>
     `;
-    document.getElementById('story-start-btn').classList.add('hidden');
+    document.getElementById('story-progress-wrap')?.classList.add('hidden');
+    document.getElementById('story-start-btn')?.classList.add('hidden');
     document.getElementById('story-btn-back')?.addEventListener('click', () => Router.back());
     document.getElementById('story-btn-retry')?.addEventListener('click', () => {
       document.getElementById('story-error-area').classList.add('hidden');
       document.getElementById('story-error-area').innerHTML = '';
-      document.getElementById('story-start-btn').classList.remove('hidden');
       setStartButtonGenerating();
       startGeneration();
     });
@@ -198,6 +273,7 @@ const StoryModule = (function() {
     },
 
     unmount() {
+      stopProgressAnimation();
       container = null;
       isGenerating = false;
     }
