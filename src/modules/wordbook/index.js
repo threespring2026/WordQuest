@@ -1,8 +1,7 @@
 /**
  * 模块二：词库管理
- * - 添加单词页：查询释义 + 直接选词
+ * - 添加单词页：查询释义 + 单词选择（仅显示查询出的单词，勾选即进入选择）
  * - 我的词库页：按熟悉程度排序 + 选词 + 删除确认
- * - 试试这些单词：随机从词典抽取
  * - 选词后不跳回顶部（DOM 原地更新）
  */
 
@@ -12,7 +11,8 @@ const WordbookModule = (function() {
   let selectedWords = [];  // 选中要学习的单词
   let currentTab   = 'add';
   let pendingWord  = null; // 添加单词页面查到的待选单词
-  let quickSuggestions = []; // 试试这些单词列表（随机抽取）
+  let queriedWords = [];   // 单词选择列表：仅包含本次会话查询过的单词
+  let invalidQueryWord = null; // 最近一次未找到释义的查询（仅做提示，不入词库、不可选）
 
   /** 从 wordData 生成词库快照（含 updatedAt，不存 networkUnavailable/notFound） */
   function toWordbookSnapshot(wordData) {
@@ -65,11 +65,6 @@ const WordbookModule = (function() {
 
   /* ===== 渲染整页 ===== */
   function render() {
-    // 刷新随机推荐词
-    if (quickSuggestions.length === 0) {
-      quickSuggestions = API.getRandomDictWords(8);
-    }
-
     const sortedBook = getSortedWordbook();
 
     container.innerHTML = `
@@ -99,19 +94,16 @@ const WordbookModule = (function() {
             </div>
           </div>
 
-          <!-- 查询结果（带选择框） -->
-          <div id="lookup-result" class="mb-3 ${pendingWord ? '' : 'hidden'}">
-            ${pendingWord ? renderPendingWord() : ''}
+          <!-- 查询结果：释义 或 此单词无效 -->
+          <div id="lookup-result" class="mb-3 ${(pendingWord || invalidQueryWord) ? '' : 'hidden'}">
+            ${pendingWord ? renderPendingWord() : invalidQueryWord ? renderInvalidWord() : ''}
           </div>
 
-          <!-- 试试这些单词 -->
+          <!-- 单词选择：仅显示查询出的单词，勾选即进入选择 -->
           <div class="card mb-3">
-            <div class="flex justify-between items-center mb-2">
-              <h3 class="font-bold text-gray-700 text-sm">💡 试试这些单词</h3>
-              <button id="btn-refresh-suggestions" class="text-xs text-blue-500">换一批</button>
-            </div>
-            <div id="suggestions-list" class="space-y-1 max-h-48 overflow-y-auto">
-              ${renderSuggestions()}
+            <h3 class="font-bold text-gray-700 text-sm mb-2">📋 单词选择</h3>
+            <div id="queried-words-list" class="space-y-1 max-h-48 overflow-y-auto">
+              ${renderQueriedWordsList()}
             </div>
           </div>
         </div>
@@ -158,61 +150,61 @@ const WordbookModule = (function() {
     bindEvents();
   }
 
-  /* ===== 渲染待选单词（查询结果） ===== */
+  /* ===== 未找到释义时的提示（不入词库、不可选） ===== */
+  function renderInvalidWord() {
+    if (!invalidQueryWord) return '';
+    return `
+      <div class="card border border-amber-200 bg-amber-50">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-gray-800">${invalidQueryWord}</span>
+          <span class="text-amber-600 text-sm">此单词无效</span>
+        </div>
+        <p class="text-gray-500 text-xs mt-1">未找到释义，无法加入词库与选择</p>
+      </div>
+    `;
+  }
+
+  /* ===== 渲染查询结果：仅显示释义，选词请用下方「单词选择」 ===== */
   function renderPendingWord() {
     if (!pendingWord) return '';
-    const isSelected = selectedWords.some(w => w.word === pendingWord.word);
-    const inBook = myWordbook.some(w => w.word === pendingWord.word);
     const defText = (pendingWord.definition || '').replace(/\r?\n/g, ' ');
     const tagLabel = (pendingWord.tag && typeof window.DictModule !== 'undefined' && window.DictModule.formatTag)
       ? window.DictModule.formatTag(pendingWord.tag)
       : (pendingWord.tag || '');
     return `
-      <div class="card border-2 border-blue-200">
-        <div class="flex items-start gap-3">
-          <div class="word-checkbox-pending w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center cursor-pointer
-            ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300'}">
-            ${isSelected ? '✓' : ''}
-          </div>
-          <div class="flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-bold text-gray-800">${pendingWord.word}</span>
-              <span class="text-gray-400 text-xs">${pendingWord.phonetic || ''}</span>
-              <span class="text-gray-500 text-xs">${pendingWord.partOfSpeech || ''}</span>
-              ${tagLabel ? `<span class="text-gray-400 text-xs">${tagLabel}</span>` : ''}
-            </div>
-            <div class="text-gray-600 text-sm mt-0.5" style="white-space: pre-wrap;">${defText}</div>
-          </div>
+      <div class="card border border-gray-200">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          <span class="font-bold text-gray-800">${pendingWord.word}</span>
+          <span class="text-gray-400 text-xs">${pendingWord.phonetic || ''}</span>
+          <span class="text-gray-500 text-xs">${pendingWord.partOfSpeech || ''}</span>
+          ${tagLabel ? `<span class="text-gray-400 text-xs">${tagLabel}</span>` : ''}
         </div>
-        <div class="flex gap-2 mt-2">
-          <button id="btn-toggle-pending"
-            class="flex-1 text-sm py-1.5 rounded-lg ${isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}">
-            ${isSelected ? '✓ 已选择' : '+ 选择此词'}
-          </button>
-          ${inBook ? '' : `<button id="btn-save-pending" class="flex-1 text-sm py-1.5 bg-green-50 text-green-600 rounded-lg">存入词库</button>`}
-        </div>
+        <div class="text-gray-600 text-sm" style="white-space: pre-wrap;">${defText}</div>
+        <p class="text-gray-400 text-xs mt-2">已存入词库，需选词请在下方「单词选择」中勾选</p>
       </div>
     `;
   }
 
-  /* ===== 渲染建议词列表 ===== */
-  function renderSuggestions() {
-    return quickSuggestions.map(w => {
-      const inBook = myWordbook.some(b => b.word === w.word);
+  /* ===== 渲染单词选择列表（仅查询过的单词） ===== */
+  function renderQueriedWordsList() {
+    if (queriedWords.length === 0) {
+      return '<p class="text-gray-400 text-sm py-4 text-center">请先查询单词，勾选后将出现在此处</p>';
+    }
+    return queriedWords.map(w => {
       const isSelected = selectedWords.some(s => s.word === w.word);
+      const defText = (w.definition || '').replace(/\r?\n/g, ' ').slice(0, 60);
       return `
-        <div class="suggestion-item flex items-center gap-2 p-2 rounded-lg bg-gray-50 hover:bg-blue-50 cursor-pointer
+        <div class="queried-word-item flex items-center gap-2 p-2 rounded-lg bg-gray-50 hover:bg-blue-50 cursor-pointer
           ${isSelected ? 'bg-blue-50 border border-blue-200' : ''}" data-word="${w.word}">
-          <div class="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-xs
+          <div class="word-checkbox-queried w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 text-xs
             ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300'}">
             ${isSelected ? '✓' : ''}
           </div>
           <div class="flex-1 min-w-0">
             <span class="font-medium text-gray-800 text-sm">${w.word}</span>
-            <span class="text-gray-400 text-xs ml-1">${w.partOfSpeech || ''}</span>
-            <span class="text-gray-500 text-xs block truncate">${w.definition}</span>
+            <span class="text-gray-400 text-xs ml-1">${w.phonetic || ''}</span>
+            <span class="text-gray-500 text-xs block truncate">${w.partOfSpeech ? w.partOfSpeech + ' ' : ''}${defText}</span>
           </div>
-          ${inBook ? '<span class="text-green-500 text-xs">已收藏</span>' : ''}
         </div>
       `;
     }).join('');
@@ -260,8 +252,24 @@ const WordbookModule = (function() {
     try {
       const wordData = await API.lookupWord(wordStr);
       UI.hideLoading();
+      if (wordData.notFound) {
+        UI.showToast('此单词无效', 'error');
+        pendingWord = null;
+        invalidQueryWord = wordStr;
+        render();
+        document.getElementById('lookup-result')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
       if (wordData.networkUnavailable) UI.showToast('网络不可用', 'error');
+      invalidQueryWord = null;
       pendingWord = { ...wordData, familiarity: 0 };
+      const existing = queriedWords.findIndex(w => w.word.toLowerCase() === pendingWord.word.toLowerCase());
+      if (existing >= 0) queriedWords[existing] = pendingWord;
+      else queriedWords.push(pendingWord);
+      if (!myWordbook.some(w => w.word.toLowerCase() === pendingWord.word.toLowerCase())) {
+        myWordbook.push(toWordbookSnapshot({ ...pendingWord, familiarity: 0 }));
+        saveMyWordbook();
+      }
       render();
       document.getElementById('lookup-result')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) {
@@ -270,20 +278,7 @@ const WordbookModule = (function() {
     }
   }
 
-  /* ===== 存入词库（快照含 phonetic/definition/updatedAt） ===== */
-  function savePendingToBook() {
-    if (!pendingWord) return;
-    if (myWordbook.some(w => w.word === pendingWord.word)) {
-      UI.showToast('该单词已在词库中', 'info');
-      return;
-    }
-    myWordbook.push(toWordbookSnapshot({ ...pendingWord, familiarity: 0 }));
-    saveMyWordbook();
-    UI.showToast(`已加入词库: ${pendingWord.word}`, 'success');
-    render();
-  }
-
-  /* ===== 切换选择（支持待选词 + 建议词 + 词库词，不重新渲染列表） ===== */
+  /* ===== 切换选择（单词选择列表 / 词库词） ===== */
   function toggleWord(wordData) {
     const idx = selectedWords.findIndex(w => w.word === wordData.word);
     if (idx > -1) {
@@ -422,31 +417,8 @@ const WordbookModule = (function() {
       if (e.key === 'Enter') lookupWord(e.target.value);
     });
 
-    // 查询结果：选择 / 存入
-    document.getElementById('btn-toggle-pending')?.addEventListener('click', () => {
-      if (!pendingWord) return;
-      toggleWord(pendingWord);
-      render();
-    });
-    document.getElementById('btn-save-pending')?.addEventListener('click', savePendingToBook);
-
-    // 待选词复选框点击
-    document.querySelector('.word-checkbox-pending')?.addEventListener('click', () => {
-      if (!pendingWord) return;
-      toggleWord(pendingWord);
-      render();
-    });
-
-    // 换一批建议词
-    document.getElementById('btn-refresh-suggestions')?.addEventListener('click', () => {
-      quickSuggestions = API.getRandomDictWords(8);
-      const listEl = document.getElementById('suggestions-list');
-      if (listEl) listEl.innerHTML = renderSuggestions();
-      bindSuggestionEvents();
-    });
-
-    // 建议词点击
-    bindSuggestionEvents();
+    // 单词选择列表：点击项或复选框即勾选/取消，直接进入选择
+    bindQueriedWordsEvents();
 
     // 词库项：选择 + 删除
     document.querySelectorAll('.wordbook-item').forEach(item => {
@@ -478,20 +450,19 @@ const WordbookModule = (function() {
     document.getElementById('btn-back')?.addEventListener('click', () => Router.back());
   }
 
-  /* ===== 建议词事件 ===== */
-  function bindSuggestionEvents() {
-    document.querySelectorAll('.suggestion-item').forEach(el => {
+  /* ===== 单词选择列表事件：勾选即进入选择 ===== */
+  function bindQueriedWordsEvents() {
+    document.querySelectorAll('.queried-word-item').forEach(el => {
       el.addEventListener('click', () => {
         const wordStr = el.dataset.word;
-        const wordData = quickSuggestions.find(w => w.word === wordStr);
+        const wordData = queriedWords.find(w => w.word === wordStr);
         if (!wordData) return;
         if (toggleWord(wordData)) {
-          // 原地更新建议词样式
           const isSelected = selectedWords.some(w => w.word === wordStr);
           el.classList.toggle('bg-blue-50', isSelected);
           el.classList.toggle('border', isSelected);
           el.classList.toggle('border-blue-200', isSelected);
-          const cb = el.querySelector('div.w-4');
+          const cb = el.querySelector('.word-checkbox-queried');
           if (cb) {
             cb.classList.toggle('bg-blue-500', isSelected);
             cb.classList.toggle('border-blue-500', isSelected);
@@ -500,9 +471,6 @@ const WordbookModule = (function() {
             cb.textContent = isSelected ? '✓' : '';
           }
           updateBottomBar();
-          // 词库标签计数更新
-          const tabBtn = document.querySelector('[data-tab="select"]');
-          if (tabBtn) tabBtn.textContent = `📚 我的词库 (${myWordbook.length})`;
         }
       });
     });
@@ -514,8 +482,9 @@ const WordbookModule = (function() {
       loadMyWordbook();
       selectedWords = [];
       pendingWord   = null;
-      quickSuggestions = API.getRandomDictWords(8);
-      currentTab = myWordbook.length > 0 ? 'select' : 'add';
+      queriedWords  = [];
+      invalidQueryWord = null;
+      currentTab = 'add';
       render();
       EventBus.emit(Events.SCENE_READY, { scene: 'wordbook' });
     },

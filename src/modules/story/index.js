@@ -47,20 +47,23 @@ const StoryModule = (function() {
       </div>
       
       <div class="flex-1 overflow-y-auto px-4 pb-4">
-        <!-- 故事简介 -->
-        <div class="card mb-3">
-          <h3 class="text-gray-800 font-bold mb-1 text-sm">故事简介</h3>
-          <p id="story-intro-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.background || '（无）') : '正在生成故事简介…'}</p>
-        </div>
-        <!-- 任务信息 -->
-        <div class="card mb-3">
-          <h3 class="text-gray-800 font-bold mb-1 text-sm">任务信息</h3>
-          <p id="story-mission-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.mission || '（无）') : '正在生成…'}</p>
-        </div>
-        <!-- 内容 -->
-        <div class="card mb-3">
-          <h3 class="text-gray-800 font-bold mb-1 text-sm">内容</h3>
-          <p id="story-content-text" class="text-gray-600 text-sm">${hasSynopsis ? (synopsis.content || '根据背景与任务，在冒险中与多位角色对话，选择正确使用目标单词的选项完成关卡。') : '生成后将显示冒险内容说明。'}</p>
+        <!-- 故事简介 + 任务信息 + 内容（合一面板） -->
+        <div class="card mb-4">
+          <h3 class="text-gray-800 font-bold mb-2 text-sm">故事与任务</h3>
+          <div class="space-y-3 text-gray-600 text-sm">
+            <div>
+              <span class="font-medium text-gray-700">故事简介：</span>
+              <p id="story-intro-text" class="mt-0.5">${hasSynopsis ? (synopsis.background || '（无）') : '正在生成故事简介…'}</p>
+            </div>
+            <div>
+              <span class="font-medium text-gray-700">任务信息：</span>
+              <p id="story-mission-text" class="mt-0.5">${hasSynopsis ? (synopsis.mission || '（无）') : '正在生成…'}</p>
+            </div>
+            <div>
+              <span class="font-medium text-gray-700">内容：</span>
+              <p id="story-content-text" class="mt-0.5">${hasSynopsis ? (synopsis.content || '根据背景与任务，在冒险中与多位角色对话，选择正确使用目标单词的选项完成关卡。') : '生成后将显示冒险内容说明。'}</p>
+            </div>
+          </div>
         </div>
 
         <!-- 单词预热：详细列表（与结果页单词回顾一致，可滑动） -->

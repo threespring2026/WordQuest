@@ -8,15 +8,23 @@ const AuthModule = (function() {
   let currentTab = 'login';
   let selectedAvatar = 'boy';
 
-  // 生成最近7天的日期
-  function getLast7Days() {
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      days.push(d.toISOString().split('T')[0]);
+  /** 日期格式 YYYY-MM-DD（本地） */
+  function toDateKey(d) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  /** 计算连续打卡天数（从今天往前数） */
+  function getConsecutiveCheckinDays(checkinDays) {
+    if (!checkinDays || checkinDays.length === 0) return 0;
+    const set = new Set(checkinDays);
+    let count = 0;
+    let d = new Date();
+    while (set.has(toDateKey(d))) {
+      count++;
+      d.setDate(d.getDate() - 1);
     }
-    return days;
+    return count;
   }
 
   // 渲染页面
@@ -118,7 +126,8 @@ const AuthModule = (function() {
   // 渲染已登录的用户资料
   function renderProfileView(user) {
     const checkinDays = user.checkinDays || [];
-    const last7Days = getLast7Days();
+    const consecutiveDays = getConsecutiveCheckinDays(checkinDays);
+    const totalDays = checkinDays.length;
     const avatarImg = user.avatar === 'girl' ? 'assets/player/player_girl.png' : 'assets/player/player_boy.png';
     
     container.innerHTML = `
@@ -153,16 +162,15 @@ const AuthModule = (function() {
             <span class="font-bold text-blue-600 text-xl">${user.tier === 'vip' ? '∞' : user.gamesRemaining}</span>
           </div>
           
-          <!-- 精简打卡日历 -->
-          <div class="mt-3 flex justify-between items-center">
-            <span class="text-gray-500 text-xs">本周打卡</span>
-            <div class="flex gap-1">
-              ${last7Days.map(day => `
-                <div class="w-5 h-5 rounded text-xs flex items-center justify-center
-                  ${checkinDays.includes(day) ? 'bg-yellow-400 text-white' : 'bg-gray-100 text-gray-400'}">
-                  ${checkinDays.includes(day) ? '★' : '·'}
-                </div>
-              `).join('')}
+          <!-- 打卡统计：连续天数 / 总天数 -->
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <div class="p-2 bg-amber-50 rounded-lg text-center">
+              <div class="text-2xl font-bold text-amber-600">${consecutiveDays}</div>
+              <div class="text-gray-500 text-xs">连续打卡</div>
+            </div>
+            <div class="p-2 bg-gray-50 rounded-lg text-center">
+              <div class="text-2xl font-bold text-gray-700">${totalDays}</div>
+              <div class="text-gray-500 text-xs">总共打卡</div>
             </div>
           </div>
         </div>
