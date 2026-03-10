@@ -96,24 +96,20 @@ const UI = (function() {
         error: 'bg-red-500',
         info: 'bg-blue-500'
       };
-      
+      // 置于所有 UI（顶栏、对话面板）之上，并居中于整个画面
       const toast = this.createElement('div', {
-        className: `fixed top-4 left-1/2 -translate-x-1/2 ${colors[type]} text-white px-4 py-2 rounded-lg shadow-lg z-50 transform transition-all duration-300`,
-        style: { opacity: '0', transform: 'translateX(-50%) translateY(-20px)' }
+        className: `fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${colors[type]} text-white px-4 py-2 rounded-lg shadow-lg transform transition-all duration-300`,
+        style: { opacity: '0', zIndex: 9999 }
       }, message);
       
       document.body.appendChild(toast);
       
-      // 动画显示
       requestAnimationFrame(() => {
         toast.style.opacity = '1';
-        toast.style.transform = 'translateX(-50%) translateY(0)';
       });
       
-      // 自动消失
       setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-50%) translateY(-20px)';
         setTimeout(() => toast.remove(), 300);
       }, duration);
     },
