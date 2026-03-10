@@ -254,14 +254,20 @@ const UI = (function() {
         this.showToast('网络不可用', 'error');
       }
       const def = wordData.definition || '（暂无释义）';
+      const defHtml = def.split(/\r?\n/).map(line => escapeHtml(line)).join('<br>');
       const sub = wordData.notFound ? '<p class="text-amber-600 mt-1">未找到释义</p>' : '';
+      const tagLabel = (wordData.tag && typeof window.DictModule !== 'undefined' && window.DictModule.formatTag)
+        ? window.DictModule.formatTag(wordData.tag)
+        : (wordData.tag || '');
+      const tagHtml = tagLabel ? `<div class="text-gray-500 text-xs mt-1">${escapeHtml(tagLabel)}</div>` : '';
       const exHtml = (wordData.examples && wordData.examples.length)
         ? '<div class="mt-2 text-gray-600"><div class="font-medium mb-1">例句</div><ul class="list-disc pl-4 space-y-0.5">' +
           wordData.examples.slice(0, 3).map(ex => `<li>${escapeHtml(ex)}</li>`).join('') + '</ul></div>'
         : '';
       document.getElementById('word-detail-body').innerHTML = `
         <div class="word-phonetic text-gray-600 mb-1">${escapeHtml(wordData.phonetic || '')}</div>
-        <div class="word-definition">${escapeHtml(wordData.partOfSpeech ? wordData.partOfSpeech + ' ' : '')}${escapeHtml(def)}</div>
+        <div class="word-definition">${escapeHtml(wordData.partOfSpeech ? wordData.partOfSpeech + ' ' : '')}${defHtml}</div>
+        ${tagHtml}
         ${sub}
         ${exHtml}
       `;

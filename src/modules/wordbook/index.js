@@ -163,6 +163,10 @@ const WordbookModule = (function() {
     if (!pendingWord) return '';
     const isSelected = selectedWords.some(w => w.word === pendingWord.word);
     const inBook = myWordbook.some(w => w.word === pendingWord.word);
+    const defText = (pendingWord.definition || '').replace(/\r?\n/g, ' ');
+    const tagLabel = (pendingWord.tag && typeof window.DictModule !== 'undefined' && window.DictModule.formatTag)
+      ? window.DictModule.formatTag(pendingWord.tag)
+      : (pendingWord.tag || '');
     return `
       <div class="card border-2 border-blue-200">
         <div class="flex items-start gap-3">
@@ -171,12 +175,13 @@ const WordbookModule = (function() {
             ${isSelected ? '✓' : ''}
           </div>
           <div class="flex-1">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="font-bold text-gray-800">${pendingWord.word}</span>
               <span class="text-gray-400 text-xs">${pendingWord.phonetic || ''}</span>
               <span class="text-gray-500 text-xs">${pendingWord.partOfSpeech || ''}</span>
+              ${tagLabel ? `<span class="text-gray-400 text-xs">${tagLabel}</span>` : ''}
             </div>
-            <div class="text-gray-600 text-sm mt-0.5">${pendingWord.definition}</div>
+            <div class="text-gray-600 text-sm mt-0.5" style="white-space: pre-wrap;">${defText}</div>
           </div>
         </div>
         <div class="flex gap-2 mt-2">

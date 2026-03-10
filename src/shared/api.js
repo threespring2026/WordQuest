@@ -226,10 +226,10 @@ const API = (function() {
     },
 
     /**
-     * 查询单词释义（网络优先 + 内存/持久缓存 + 我的词库快照 + 兜底）
-     * 顺序：内存缓存 → Free Dictionary API → 持久缓存 → 我的词库快照 → 占位（并标记 networkUnavailable）
+     * 查询单词释义（本地 ECDICT 分片优先 + 内存/持久缓存 + 我的词库快照 + 兜底）
+     * 顺序：内存缓存 → DictModule 本地分片 → 持久缓存 → 我的词库快照 → 占位
      * @param {string} word
-     * @returns {Promise<{word, phonetic, partOfSpeech, definition, examples?, networkUnavailable?, notFound?}>}
+     * @returns {Promise<{word, phonetic, partOfSpeech, definition, tag?, examples?, notFound?}>}
      */
     async lookupWord(word) {
       const key = (word || '').toLowerCase().trim();
@@ -243,25 +243,30 @@ const API = (function() {
       const mem = this._wordMemoryCache.get(key);
       if (mem) return mem;
 
-      // 2. 网络请求 Free Dictionary API
-      try {
-        const url = `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(key)}`;
-        const res = await fetch(url, { method: 'GET' });
-        if (res.ok) {
-          const data = await res.json();
-          const parsed = parseFreeDictResponse(key, data);
-          if (parsed) {
-            this._wordMemoryCache.set(key, parsed);
-            setPersistentWordCache(key, parsed, CACHE_KEY, CACHE_MAX);
-            return parsed;
+      // 2. 本地 ECDICT 分片词库（DictModule）
+      if (typeof window !== 'undefined' && window.DictModule && typeof window.DictModule.lookup === 'function') {
+        try {
+          const local = await window.DictModule.lookup(key);
+          if (local && local.notFound) {
+            const notFoundResult = { word: key, phonetic: '', partOfSpeech: '', definition: '（未找到释义）', notFound: true };
+            this._wordMemoryCache.set(key, notFoundResult);
+            return notFoundResult;
           }
-        }
-        if (res.status === 404) {
-          const notFoundResult = { word: key, phonetic: '', partOfSpeech: '', definition: '（未找到释义）', notFound: true };
-          this._wordMemoryCache.set(key, notFoundResult);
-          return notFoundResult;
-        }
-      } catch (_) {}
+          if (local && !local.notFound) {
+            const normalized = {
+              word: local.word,
+              phonetic: local.phonetic || '',
+              partOfSpeech: '',
+              definition: local.definition || '（暂无释义）',
+              tag: local.tag || '',
+              notFound: false
+            };
+            this._wordMemoryCache.set(key, normalized);
+            setPersistentWordCache(key, normalized, CACHE_KEY, CACHE_MAX);
+            return normalized;
+          }
+        } catch (_) { /* 分片异常时继续走后续兜底 */ }
+      }
 
       // 3. 持久缓存
       const cached = getPersistentWordCache(key, CACHE_KEY);
@@ -277,13 +282,13 @@ const API = (function() {
         return snapshot;
       }
 
-      // 5. 兜底：网络不可用且无缓存
+      // 5. 兜底
       const fallback = {
         word: key,
         phonetic: '',
         partOfSpeech: '',
         definition: '（暂无释义）',
-        networkUnavailable: true
+        notFound: false
       };
       this._wordMemoryCache.set(key, fallback);
       return fallback;
