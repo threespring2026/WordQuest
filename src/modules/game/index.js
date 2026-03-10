@@ -16,6 +16,18 @@ const GameModule = (function() {
   let mapWidth = 0;
   let mapHeight = 0;
 
+  // NPC 锚点：与地图编辑器中 slot 对齐，使用脚底中心（.npc-sprite 宽 70px，名+图约 88px 高）
+  const NPC_ANCHOR_X = 35;
+  const NPC_ANCHOR_Y = 88;
+
+  // 玩家：逻辑中心锚点 + 脚底碰撞盒（缩小并移到脚部，仅用脚底与边界碰撞）
+  const PLAYER_ANCHOR_X = 25;
+  const PLAYER_ANCHOR_Y = 30;
+  const PLAYER_FEET_OFFSET_X = 20;
+  const PLAYER_FEET_OFFSET_Y = 80;
+  const PLAYER_FEET_HALF_W = 8;
+  const PLAYER_FEET_HALF_H = 4;
+
   // 寻路：网格与速度
   const GRID_COLS = 48;
   const GRID_ROWS = 64;
@@ -86,8 +98,8 @@ const GameModule = (function() {
       gy: Math.floor((py / mapHeight) * GRID_ROWS)
     });
     const toPlayer = (gx, gy) => ({
-      left: ((gx + 0.5) / GRID_COLS) * mapWidth - 25,
-      top: ((gy + 0.5) / GRID_ROWS) * mapHeight - 30
+      left: ((gx + 0.5) / GRID_COLS) * mapWidth - PLAYER_ANCHOR_X,
+      top: ((gy + 0.5) / GRID_ROWS) * mapHeight - PLAYER_ANCHOR_Y
     });
     const clampGrid = (gx, gy) => ({
       gx: Math.max(0, Math.min(GRID_COLS - 1, gx)),
@@ -222,8 +234,8 @@ const GameModule = (function() {
       const npcEl = document.createElement('div');
       npcEl.className = 'npc-sprite';
       npcEl.id = `npc-${npc.npcId}`;
-      npcEl.style.left = (x - 30) + 'px';
-      npcEl.style.top = (y - 40) + 'px';
+      npcEl.style.left = (x - NPC_ANCHOR_X) + 'px';
+      npcEl.style.top = (y - NPC_ANCHOR_Y) + 'px';
       npcEl.dataset.npcId = npc.npcId;
       
       npcEl.innerHTML = `
@@ -246,8 +258,8 @@ const GameModule = (function() {
     const playerEl = document.createElement('div');
     playerEl.className = 'player-sprite';
     playerEl.id = 'player';
-    playerEl.style.left = (playerX - 25) + 'px';
-    playerEl.style.top = (playerY - 30) + 'px';
+    playerEl.style.left = (playerX - PLAYER_ANCHOR_X) + 'px';
+    playerEl.style.top = (playerY - PLAYER_ANCHOR_Y) + 'px';
     
     const avatarMap = { boy: 'assets/player/player_boy.png', girl: 'assets/player/player_girl.png' };
     const avatarImg = user?.isGuest
@@ -307,18 +319,19 @@ const GameModule = (function() {
     let x = e.clientX - rect.left;
     let y = e.clientY - rect.top;
     
-    // 应用边界限制
     const minX = bounds.minX * mapWidth;
     const maxX = bounds.maxX * mapWidth;
     const minY = bounds.minY * mapHeight;
     const maxY = bounds.maxY * mapHeight;
     
-    x = Math.max(minX, Math.min(maxX - 50, x));
-    y = Math.max(minY, Math.min(maxY - 60, y));
+    // 边界限制：仅用脚底碰撞盒与边界碰撞（脚底在锚点下方 PLAYER_FEET_OFFSET_Y、中心偏右 PLAYER_FEET_OFFSET_X）
+    x = Math.max(minX - PLAYER_FEET_OFFSET_X + PLAYER_FEET_HALF_W, Math.min(maxX - PLAYER_FEET_OFFSET_X - PLAYER_FEET_HALF_W, x));
+    y = Math.max(minY - PLAYER_FEET_OFFSET_Y + PLAYER_FEET_HALF_H, Math.min(maxY - PLAYER_FEET_OFFSET_Y - PLAYER_FEET_HALF_H, y));
     
-    // 检查是否在障碍区内（比例坐标 0-1）
-    const rx = x / mapWidth;
-    const ry = y / mapHeight;
+    const feetCxClamped = x + PLAYER_FEET_OFFSET_X;
+    const feetCyClamped = y + PLAYER_FEET_OFFSET_Y;
+    const rx = feetCxClamped / mapWidth;
+    const ry = feetCyClamped / mapHeight;
     const blocked = mapConfig.blockedPolygons || [];
     for (let i = 0; i < blocked.length; i++) {
       if (pointInPolygon(rx, ry, blocked[i])) {
@@ -327,21 +340,21 @@ const GameModule = (function() {
       }
     }
     
-    movePlayerTo(x - 25, y - 30);
+    movePlayerTo(x - PLAYER_ANCHOR_X, y - PLAYER_ANCHOR_Y);
   }
 
   // 玩家与 NPC 的“可对话”距离（像素）
   const TALK_RANGE = 100;
 
-  // 玩家是否在 NPC 对话范围内
+  // 玩家是否在 NPC 对话范围内（玩家中心 PLAYER_ANCHOR；NPC 脚底中心 NPC_ANCHOR）
   function isPlayerNearNpc(npcId) {
     const player = document.getElementById('player');
     const npcEl = document.getElementById(`npc-${npcId}`);
     if (!player || !npcEl) return false;
-    const px = parseFloat(player.style.left) + 25;
-    const py = parseFloat(player.style.top) + 30;
-    const nx = parseFloat(npcEl.style.left) + 30;
-    const ny = parseFloat(npcEl.style.top) + 40;
+    const px = parseFloat(player.style.left) + PLAYER_ANCHOR_X;
+    const py = parseFloat(player.style.top) + PLAYER_ANCHOR_Y;
+    const nx = parseFloat(npcEl.style.left) + NPC_ANCHOR_X;
+    const ny = parseFloat(npcEl.style.top) + NPC_ANCHOR_Y;
     return Math.hypot(px - nx, py - ny) <= TALK_RANGE;
   }
 
@@ -359,8 +372,8 @@ const GameModule = (function() {
     const npcEl = document.getElementById(`npc-${npcId}`);
     const npcLeft = parseFloat(npcEl.style.left);
     const npcTop = parseFloat(npcEl.style.top);
-    const targetLeft = npcLeft;
-    const targetTop = npcTop + 80;
+    const targetLeft = npcLeft + NPC_ANCHOR_X - PLAYER_ANCHOR_X;
+    const targetTop = npcTop + NPC_ANCHOR_Y - 35;
     
     // 已在对话范围内则直接开始对话
     if (isPlayerNearNpc(npcId)) {
@@ -399,8 +412,8 @@ const GameModule = (function() {
     const mapConfig = API.getMapConfig(storyConfig.mapId);
     const path = findPath(
       mapConfig,
-      curLeft + 25, curTop + 30,
-      targetLeft + 25, targetTop + 30
+      curLeft + PLAYER_ANCHOR_X, curTop + PLAYER_ANCHOR_Y,
+      targetLeft + PLAYER_ANCHOR_X, targetTop + PLAYER_ANCHOR_Y
     );
 
     if (path.length === 0) {
