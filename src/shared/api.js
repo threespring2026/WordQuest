@@ -309,6 +309,34 @@ const API = (function() {
     },
 
     /**
+     * 故事任务：创建任务，返回 jobId，由前端轮询 status 获取结果（支持锁屏后解锁继续）
+     */
+    async storyStart(wordPack, difficulty = 'intermediate') {
+      const base = this._apiBase();
+      const res = await fetch(base + '/api/story/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wordPack, difficulty })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || '启动故事任务失败');
+      }
+      const data = await res.json();
+      return data.jobId;
+    },
+
+    /**
+     * 故事任务：查询状态，ready 时返回 { status, synopsis, storyConfig }，error 时返回 { status, error }
+     */
+    async storyStatus(jobId) {
+      const base = this._apiBase();
+      const res = await fetch(base + '/api/story/status/' + encodeURIComponent(jobId));
+      if (!res.ok) throw new Error('查询任务状态失败');
+      return res.json();
+    },
+
+    /**
      * 生成故事简介
      * @param {Array} words - 单词列表
      * @param {string} difficulty - elementary | intermediate | advanced

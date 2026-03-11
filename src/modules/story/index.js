@@ -14,6 +14,9 @@ const StoryModule = (function() {
   let regenerateCount = 0;
   let progressTimerId = null;
   let currentProgress = 0;
+  let pollTimerId = null;
+  let currentJobId = null;
+  const POLL_INTERVAL_MS = 2500;
 
   /** 进度条速度：数值越大跑得越快，默认 0.1 约为原来的 1/10 速度，改为 1 则恢复原速 */
   const PROGRESS_SPEED = 0.1;
@@ -181,33 +184,94 @@ const StoryModule = (function() {
     UI.bindWordClick(document.body);
   }
 
-  // 开始生成故事（后台执行，完成后点亮「开始冒险」）
+  function stopPolling() {
+    if (pollTimerId) {
+      clearTimeout(pollTimerId);
+      pollTimerId = null;
+    }
+    currentJobId = null;
+  }
+
+  async function pollUntilReady(jobId) {
+    if (currentJobId !== jobId || !isGenerating) return;
+    try {
+      const data = await API.storyStatus(jobId);
+      if (data.status === 'ready') {
+        stopPolling();
+        synopsis = data.synopsis;
+        storyConfig = data.storyConfig;
+        Store.set('session.synopsis', synopsis);
+        EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
+        stopProgressAnimation();
+        updateProgressUI(100);
+        const textEl = document.getElementById('story-progress-text');
+        if (textEl) textEl.textContent = getProgressText(100);
+        setTimeout(() => {
+          setStartButtonReady();
+          updateSynopsisBlock();
+        }, 600);
+        isGenerating = false;
+        return;
+      }
+      if (data.status === 'error') {
+        stopPolling();
+        stopProgressAnimation();
+        showNetworkError(data.error || '生成失败');
+        isGenerating = false;
+        return;
+      }
+    } catch (err) {
+      console.error('Poll story status failed:', err);
+      stopPolling();
+      stopProgressAnimation();
+      showNetworkError(err.message || '网络断开：无法连接 AI 服务');
+      isGenerating = false;
+      return;
+    }
+    if (currentJobId !== jobId || !isGenerating) return;
+    pollTimerId = setTimeout(() => pollUntilReady(jobId), POLL_INTERVAL_MS);
+  }
+
+  // 开始生成故事：Mock 模式沿用原逻辑；否则 POST start + 轮询 status（支持锁屏后解锁继续）
   async function startGeneration() {
     if (isGenerating) return;
     isGenerating = true;
     setStartButtonGenerating();
+    const difficultyLevel = Store.get('session.difficulty') || 'intermediate';
+    EventBus.emit(Events.STORY_GENERATE_START, { step: 'synopsis' });
+
+    if (Store.get('settings.useMockAI')) {
+      try {
+        synopsis = await API.generateSynopsis(wordPack, difficultyLevel);
+        storyConfig = await API.generateStoryConfig(wordPack, synopsis, difficultyLevel);
+        Store.set('session.synopsis', synopsis);
+        EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
+        stopProgressAnimation();
+        updateProgressUI(100);
+        const textEl = document.getElementById('story-progress-text');
+        if (textEl) textEl.textContent = getProgressText(100);
+        setTimeout(() => {
+          setStartButtonReady();
+          updateSynopsisBlock();
+        }, 600);
+      } catch (error) {
+        console.error('Story generation failed:', error);
+        stopProgressAnimation();
+        showNetworkError(error.message || '网络断开：无法连接 AI 服务');
+      } finally {
+        isGenerating = false;
+      }
+      return;
+    }
 
     try {
-      const difficultyLevel = Store.get('session.difficulty') || 'intermediate';
-      EventBus.emit(Events.STORY_GENERATE_START, { step: 'synopsis' });
-      synopsis = await API.generateSynopsis(wordPack, difficultyLevel);
-      storyConfig = await API.generateStoryConfig(wordPack, synopsis, difficultyLevel);
-
-      Store.set('session.synopsis', synopsis);
-      EventBus.emit(Events.STORY_GENERATE_DONE, { synopsis, storyConfig });
-      stopProgressAnimation();
-      updateProgressUI(100);
-      const textEl = document.getElementById('story-progress-text');
-      if (textEl) textEl.textContent = getProgressText(100);
-      setTimeout(() => {
-        setStartButtonReady();
-        updateSynopsisBlock();
-      }, 600);
+      const jobId = await API.storyStart(wordPack, difficultyLevel);
+      currentJobId = jobId;
+      pollUntilReady(jobId);
     } catch (error) {
-      console.error('Story generation failed:', error);
+      console.error('Story start failed:', error);
       stopProgressAnimation();
       showNetworkError(error.message || '网络断开：无法连接 AI 服务');
-    } finally {
       isGenerating = false;
     }
   }
@@ -258,6 +322,13 @@ const StoryModule = (function() {
       if (document.getElementById('story-start-btn').disabled) return;
       confirmStory();
     });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && currentJobId && isGenerating) {
+        if (pollTimerId) clearTimeout(pollTimerId);
+        pollTimerId = null;
+        pollUntilReady(currentJobId);
+      }
+    });
   }
 
   return {
@@ -275,6 +346,7 @@ const StoryModule = (function() {
 
     unmount() {
       stopProgressAnimation();
+      stopPolling();
       container = null;
       isGenerating = false;
     }
