@@ -100,57 +100,51 @@ const API = (function() {
     // ==================== 用户认证 ====================
     
     /**
-     * 用户注册（本地模拟）
+     * 用户注册：请求后端，失败直接抛错（不回退本地）
      * @param {string} email 
      * @param {string} password 
      * @param {string} nickname 
      * @param {string} avatar - 形象：boy | girl
      */
     async register(email, password, nickname, avatar = 'boy') {
-      await delay(500);
-      
-      const users = getLocalUsers();
-      
-      if (users[email]) {
-        throw new Error('该邮箱已被注册');
+      await delay(300);
+      let res, data;
+      try {
+        const base = this._apiBase();
+        res = await fetch(base + '/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, nickname, avatar })
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        throw new Error('网络错误，请检查网络后重试');
       }
-      
-      const user = {
-        id: 'user_' + Date.now(),
-        email,
-        nickname: nickname || 'Player_' + Math.floor(Math.random() * 1000),
-        avatar: avatar,
-        tier: 'free',
-        gamesRemaining: 3,
-        createdAt: new Date().toISOString(),
-        checkinDays: []
-      };
-      
-      users[email] = { ...user, password };
-      saveLocalUsers(users);
-      
-      // 不返回密码
-      const { password: _, ...safeUser } = users[email];
-      return safeUser;
+      if (res.ok && data.user) return data.user;
+      throw new Error(data.error || (res.status === 400 ? '该邮箱已被注册' : '注册失败，请稍后重试'));
     },
 
     /**
-     * 用户登录（本地模拟）
+     * 用户登录：请求后端，失败直接抛错（不回退本地）
      * @param {string} email 
      * @param {string} password 
      */
     async login(email, password) {
       await delay(300);
-      
-      const users = getLocalUsers();
-      const user = users[email];
-      
-      if (!user || user.password !== password) {
-        throw new Error('邮箱或密码错误');
+      let res, data;
+      try {
+        const base = this._apiBase();
+        res = await fetch(base + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        data = await res.json().catch(() => ({}));
+      } catch (e) {
+        throw new Error('网络错误，请检查网络后重试');
       }
-      
-      const { password: _, ...safeUser } = user;
-      return safeUser;
+      if (res.ok && data.user) return data.user;
+      throw new Error(data.error || (res.status === 401 ? '邮箱或密码错误' : '登录失败，请稍后重试'));
     },
 
     /**
