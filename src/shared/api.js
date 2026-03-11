@@ -462,6 +462,90 @@ const API = (function() {
      */
     getAllNpcs() {
       return NPCS_CONFIG;
+    },
+
+    // ==================== 管理后台 API（需先 adminLogin 拿到 token） ====================
+
+    _apiBase() {
+      return (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : '';
+    },
+
+    /**
+     * 管理员登录，返回 token
+     * @param {string} password
+     * @returns {Promise<{ token: string }>}
+     */
+    async adminLogin(password) {
+      const res = await fetch(this._apiBase() + '/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: String(password).trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '登录失败');
+      return data;
+    },
+
+    /**
+     * 获取用户列表（需 Authorization: Bearer <adminToken>）
+     * @param {string} adminToken
+     * @returns {Promise<{ users: Array, onlineCount: number }>}
+     */
+    async adminGetUsers(adminToken) {
+      const res = await fetch(this._apiBase() + '/api/users', {
+        headers: { 'Authorization': 'Bearer ' + adminToken }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '获取用户列表失败');
+      return data;
+    },
+
+    /**
+     * 管理员新增用户
+     * @param {string} adminToken
+     * @param {Object} payload - { email, password, nickname?, tier? }
+     */
+    async adminAddUser(adminToken, payload) {
+      const res = await fetch(this._apiBase() + '/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '新增用户失败');
+      return data;
+    },
+
+    /**
+     * 管理员删除用户
+     * @param {string} adminToken
+     * @param {string} email
+     */
+    async adminDeleteUser(adminToken, email) {
+      const res = await fetch(this._apiBase() + '/api/users?email=' + encodeURIComponent(email), {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + adminToken }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '删除失败');
+      return data;
+    },
+
+    /**
+     * 管理员修改用户（如等级）
+     * @param {string} adminToken
+     * @param {string} email
+     * @param {Object} payload - { tier?: 'free'|'vip', nickname? }
+     */
+    async adminUpdateUser(adminToken, email, payload) {
+      const res = await fetch(this._apiBase() + '/api/users?email=' + encodeURIComponent(email), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || '更新失败');
+      return data;
     }
   };
 })();

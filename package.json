@@ -1,0 +1,13 @@
+{
+  "name": "wordquest",
+  "private": true,
+  "scripts": {
+    "local": "vercel dev"
+  },
+  "devDependencies": {
+    "vercel": "^50.31.1"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.1"
+  }
+}
