@@ -3,7 +3,7 @@
  * 入口：打开页面时 URL 带 #map-editor
  */
 
-const MAP_EDITOR_STORAGE_KEY = 'wordquest_map_editor_overrides';
+const MAP_EDITOR_STORAGE_KEY = MAP_OVERRIDES_KEY;
 
 function getOverrides() {
   try {
@@ -24,7 +24,9 @@ function getMapData(mapId) {
     ...base,
     npcSlots: overrides.npcSlots ? { ...base.npcSlots, ...overrides.npcSlots } : base.npcSlots,
     walkableBounds: overrides.walkableBounds || base.walkableBounds,
-    blockedPolygons: overrides.blockedPolygons || []
+    walkablePaths: overrides.walkablePaths || base.walkablePaths || [],
+    walkablePolygons: overrides.walkablePolygons || base.walkablePolygons || [],
+    blockedPolygons: overrides.blockedPolygons || base.blockedPolygons || []
   };
 }
 
@@ -35,7 +37,6 @@ const MapEditorModule = (function() {
   let npcSlotIndex = 0; // 0-3, 下一个要点的槽位
   let walkableDrawing = false;
   let currentPolygon = [];
-  let imageRect = null;
 
   function render() {
     const mapData = getMapData(currentMapId);
@@ -56,6 +57,8 @@ const MapEditorModule = (function() {
             `).join('')}
           </select>
         </div>
+
+        <button id="map-editor-preview" class="btn-3d btn-green w-full mb-3">试玩当前地图</button>
 
         <div class="flex gap-2 mb-3">
           <button id="map-editor-mode-npc" class="flex-1 py-2 rounded font-medium ${mode === 'npc' ? 'bg-blue-500 text-white' : 'bg-gray-200'}">NPC 站位</button>
@@ -81,7 +84,8 @@ const MapEditorModule = (function() {
         </div>
 
         <div id="map-editor-walkable-panel" class="mt-3 ${mode !== 'walkable' ? 'hidden' : ''}">
-          <p class="text-sm font-medium text-gray-700 mb-2">可行走矩形 (0～1)</p>
+          <p class="text-sm font-medium text-gray-700 mb-2">可行走范围 (0～1)</p>
+          <p class="text-xs text-gray-500 mb-2">绿色显示当前可走通道，红色显示障碍。矩形用于裁剪通道范围。</p>
           <div class="grid grid-cols-4 gap-2 mb-2">
             <div><label class="text-xs text-gray-500">minX</label><input type="number" id="wb-minX" min="0" max="1" step="0.01" class="w-full border rounded px-2 py-1 text-sm" value="${mapData.walkableBounds.minX}"></div>
             <div><label class="text-xs text-gray-500">maxX</label><input type="number" id="wb-maxX" min="0" max="1" step="0.01" class="w-full border rounded px-2 py-1 text-sm" value="${mapData.walkableBounds.maxX}"></div>
@@ -125,6 +129,7 @@ const MapEditorModule = (function() {
       currentPolygon = [];
       render();
     });
+    document.getElementById('map-editor-preview')?.addEventListener('click', previewCurrentMap);
     document.getElementById('map-editor-mode-npc')?.addEventListener('click', () => { mode = 'npc'; render(); });
     document.getElementById('map-editor-mode-walkable')?.addEventListener('click', () => { mode = 'walkable'; render(); });
 
@@ -143,18 +148,18 @@ const MapEditorModule = (function() {
     const img = document.getElementById('map-editor-img');
     const wrap = document.getElementById('map-editor-image-wrap');
     if (img && wrap) {
-      img.onload = () => { imageRect = wrap.getBoundingClientRect(); };
+      img.onload = () => { refreshMarkers(); refreshWalkablePreview(); };
       wrap.addEventListener('click', onMapImageClick);
     }
-    if (wrap) imageRect = wrap.getBoundingClientRect();
   }
 
   function getClickRatio(e) {
     const wrap = document.getElementById('map-editor-image-wrap');
     if (!wrap) return null;
-    const rect = wrap.getBoundingClientRect();
     const img = document.getElementById('map-editor-img');
     if (!img) return null;
+    const rect = img.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return null;
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
@@ -206,16 +211,16 @@ const MapEditorModule = (function() {
     const wrap = document.getElementById('map-editor-markers');
     if (!wrap) return;
     wrap.innerHTML = '';
-    const rect = wrap.getBoundingClientRect();
+    const image = document.getElementById('map-editor-img');
+    const rect = image.getBoundingClientRect();
+    const overlayRect = wrap.getBoundingClientRect();
     for (let s = 1; s <= 4; s++) {
       const slot = mapData.npcSlots[s];
       if (!slot) continue;
-      const left = (slot.x * 100) + '%';
-      const top = (slot.y * 100) + '%';
       const dot = document.createElement('div');
       dot.className = 'absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center text-white text-xs font-bold';
-      dot.style.left = left;
-      dot.style.top = top;
+      dot.style.left = (rect.left - overlayRect.left + slot.x * rect.width) + 'px';
+      dot.style.top = (rect.top - overlayRect.top + slot.y * rect.height) + 'px';
       dot.textContent = s;
       wrap.appendChild(dot);
     }
@@ -223,24 +228,35 @@ const MapEditorModule = (function() {
 
   function refreshWalkablePreview() {
     const mapData = getMapData(currentMapId);
-    const minX = Number(document.getElementById('wb-minX')?.value) ?? mapData.walkableBounds.minX;
-    const maxX = Number(document.getElementById('wb-maxX')?.value) ?? mapData.walkableBounds.maxX;
-    const minY = Number(document.getElementById('wb-minY')?.value) ?? mapData.walkableBounds.minY;
-    const maxY = Number(document.getElementById('wb-maxY')?.value) ?? mapData.walkableBounds.maxY;
-    const overrides = getOverrides();
-    overrides[currentMapId] = { ...overrides[currentMapId], walkableBounds: { minX, maxX, minY, maxY } };
-    setOverrides(overrides);
-
+    const minX = Number(document.getElementById('wb-minX')?.value);
+    const maxX = Number(document.getElementById('wb-maxX')?.value);
+    const minY = Number(document.getElementById('wb-minY')?.value);
+    const maxY = Number(document.getElementById('wb-maxY')?.value);
     const svg = document.getElementById('map-editor-svg');
-    if (!svg) return;
-    // viewBox 0 0 100 100，比例 0-1 对应 0-100
-    const x1 = minX * 100, y1 = minY * 100, w = (maxX - minX) * 100, h = (maxY - minY) * 100;
-    let html = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="rgba(0,200,0,0.15)" stroke="green" stroke-width="1"/>`;
-    const mapData2 = getMapData(currentMapId);
-    (mapData2.blockedPolygons || []).forEach((poly) => {
+    const img = document.getElementById('map-editor-img');
+    if (!svg || !img) return;
+    const width = img.naturalWidth || 750;
+    const height = img.naturalHeight || 1200;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const bx = minX * width, by = minY * height;
+    const bw = Math.max(0, (maxX - minX) * width), bh = Math.max(0, (maxY - minY) * height);
+    let html = `<defs><clipPath id="walkable-clip"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}"/></clipPath></defs>`;
+    html += `<g clip-path="url(#walkable-clip)">`;
+    if (!(mapData.walkablePaths || []).length && !(mapData.walkablePolygons || []).length) {
+      html += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(0,200,0,0.18)"/>`;
+    }
+    (mapData.walkablePaths || []).forEach(path => {
+      const points = path.points.map(p => `${p.x * width},${p.y * height}`).join(' ');
+      html += `<polyline points="${points}" fill="none" stroke="rgba(0,190,70,0.34)" stroke-width="${path.radius * width * 2}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    });
+    (mapData.walkablePolygons || []).forEach(poly => {
+      html += `<polygon points="${poly.map(p => `${p.x * width},${p.y * height}`).join(' ')}" fill="rgba(0,190,70,0.34)"/>`;
+    });
+    html += `</g><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="none" stroke="green" stroke-width="2"/>`;
+    (mapData.blockedPolygons || []).forEach((poly) => {
       if (poly.length < 3) return;
-      const pts = poly.map(p => `${p.x * 100} ${p.y * 100}`).join(' ');
-      html += `<polygon points="${pts}" fill="rgba(200,0,0,0.3)" stroke="red" stroke-width="1"/>`;
+      const pts = poly.map(p => `${p.x * width},${p.y * height}`).join(' ');
+      html += `<polygon points="${pts}" fill="rgba(200,0,0,0.35)" stroke="red" stroke-width="2"/>`;
     });
     svg.innerHTML = html;
   }
@@ -251,10 +267,12 @@ const MapEditorModule = (function() {
     refreshWalkablePreview();
     if (currentPolygon.length >= 2) {
       const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      poly.setAttribute('points', currentPolygon.map(p => `${p.x * 100} ${p.y * 100}`).join(' '));
+      const img = document.getElementById('map-editor-img');
+      const width = img?.naturalWidth || 750, height = img?.naturalHeight || 1200;
+      poly.setAttribute('points', currentPolygon.map(p => `${p.x * width},${p.y * height}`).join(' '));
       poly.setAttribute('fill', 'rgba(255,165,0,0.3)');
       poly.setAttribute('stroke', 'orange');
-      poly.setAttribute('stroke-width', '1');
+      poly.setAttribute('stroke-width', '2');
       svg.appendChild(poly);
     }
   }
@@ -292,7 +310,7 @@ const MapEditorModule = (function() {
       return;
     }
     const overrides = getOverrides();
-    const arr = [...(overrides[currentMapId]?.blockedPolygons || [])];
+    const arr = [...getMapData(currentMapId).blockedPolygons];
     arr.push(currentPolygon);
     overrides[currentMapId] = { ...overrides[currentMapId], blockedPolygons: arr };
     setOverrides(overrides);
@@ -309,7 +327,7 @@ const MapEditorModule = (function() {
       const maxX = Number(document.getElementById('wb-maxX')?.value);
       const minY = Number(document.getElementById('wb-minY')?.value);
       const maxY = Number(document.getElementById('wb-maxY')?.value);
-      if ([minX, maxX, minY, maxY].some(n => isNaN(n))) {
+      if ([minX, maxX, minY, maxY].some(n => !Number.isFinite(n) || n < 0 || n > 1) || minX >= maxX || minY >= maxY) {
         UI.showToast('请填写正确的可行走矩形', 'error');
         return;
       }
@@ -318,6 +336,16 @@ const MapEditorModule = (function() {
       setOverrides(overrides);
     }
     UI.showToast('已保存，游戏将使用此配置', 'success');
+  }
+
+  function previewCurrentMap() {
+    Store.resetSession();
+    Store.set('session.mapPreviewId', currentMapId);
+    Store.set('session.storyConfig', { ...MOCK_CONFIG.storyConfig, mapId: currentMapId });
+    Store.set('session.wordPack', MOCK_CONFIG.wordPack);
+    Store.set('session.synopsis', { mission: `试玩${MAPS_CONFIG[currentMapId].name}地图` });
+    Store.set('session.startTime', Date.now());
+    Router.go('game');
   }
 
   function resetCurrent() {
@@ -341,6 +369,8 @@ const MapEditorModule = (function() {
       if (slot) text += `  ${s}: { x: ${slot.x}, y: ${slot.y} },\n`;
     });
     text += `},\nwalkableBounds: { minX: ${mapData.walkableBounds.minX}, maxX: ${mapData.walkableBounds.maxX}, minY: ${mapData.walkableBounds.minY}, maxY: ${mapData.walkableBounds.maxY} }`;
+    if (mapData.walkablePaths?.length) text += `,\nwalkablePaths: ${JSON.stringify(mapData.walkablePaths)}`;
+    if (mapData.walkablePolygons?.length) text += `,\nwalkablePolygons: ${JSON.stringify(mapData.walkablePolygons)}`;
     if (mapData.blockedPolygons && mapData.blockedPolygons.length > 0) {
       text += `,\nblockedPolygons: ${JSON.stringify(mapData.blockedPolygons)}`;
     }

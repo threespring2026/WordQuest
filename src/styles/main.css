@@ -331,7 +331,10 @@ body {
   position: relative;
   flex: 1;
   overflow: hidden;
+  background: #d7d5c8;
 }
+
+#map-bg { object-fit: contain; }
 
 #game-map canvas {
   position: absolute;
@@ -344,6 +347,7 @@ body {
 .npc-sprite {
   position: absolute;
   width: 70px;
+  transform: translate(-50%, -100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -353,7 +357,7 @@ body {
 }
 
 .npc-sprite:hover {
-  transform: scale(1.05);
+  transform: translate(-50%, -100%) scale(1.05);
 }
 
 .npc-image {
@@ -393,6 +397,19 @@ body {
   animation: bounce 0.5s ease-in-out infinite alternate;
 }
 
+/* 靠近地图上沿的角色把姓名和任务提示移到侧面，避免被顶栏裁掉。 */
+.npc-sprite.edge-top .npc-name-top {
+  position: absolute;
+  top: 24px;
+  left: 58px;
+  z-index: 2;
+}
+
+.npc-sprite.edge-top .npc-exclamation {
+  top: 18px;
+  left: 0;
+}
+
 @keyframes bounce {
   from { transform: translateX(-50%) translateY(0); }
   to { transform: translateX(-50%) translateY(-5px); }
@@ -401,10 +418,11 @@ body {
 .player-sprite {
   position: absolute;
   width: 90px;
+  transform: translate(-50%, -100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  transition: left 0.5s ease-out, top 0.5s ease-out;
+  will-change: left, top;
   z-index: 10;
 }
 

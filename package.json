@@ -2,7 +2,8 @@
   "name": "wordquest",
   "private": true,
   "scripts": {
-    "local": "vercel dev"
+    "local": "vercel dev",
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "vercel": "^50.31.1"

@@ -13,137 +13,36 @@ const GameModule = (function() {
   let availableOptions = [];
   let dialogueStep = 'idle';
   let isDialogueActive = false;  // 对话中锁定移动
-  let mapWidth = 0;
-  let mapHeight = 0;
 
-  // NPC 锚点：与地图编辑器中 slot 对齐，使用脚底中心（.npc-sprite 宽 70px，名+图约 88px 高）
-  const NPC_ANCHOR_X = 35;
-  const NPC_ANCHOR_Y = 88;
-
-  // 玩家：逻辑中心锚点 + 脚底碰撞盒（缩小并移到脚部，仅用脚底与边界碰撞）
-  const PLAYER_ANCHOR_X = 25;
-  const PLAYER_ANCHOR_Y = 30;
-  const PLAYER_FEET_OFFSET_X = 20;
-  const PLAYER_FEET_OFFSET_Y = 80;
-  const PLAYER_FEET_HALF_W = 8;
-  const PLAYER_FEET_HALF_H = 4;
-
-  // 寻路：网格与速度
-  const GRID_COLS = 48;
-  const GRID_ROWS = 64;
-  const MOVE_SPEED = 140;  // 像素/秒
+  // 地图、碰撞、人物脚底统一使用原图的归一化坐标。
+  let mapFrame = null;
+  let imageAspect = 1.6;
+  let playerPosition = null;
+  let mapResizeObserver = null;
+  let mapInitialized = false;
   let moveAnimationId = null;
+  let talkTimeoutId = null;
+  const MOVE_SPEED = 140; // 屏幕像素/秒
+  const TALK_RANGE = 72;
 
-  // 点在多边形内（射线法）
-  function pointInPolygon(x, y, polygon) {
-    if (!polygon || polygon.length < 3) return false;
-    let inside = false;
-    const n = polygon.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const xi = polygon[i].x, yi = polygon[i].y;
-      const xj = polygon[j].x, yj = polygon[j].y;
-      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
-    }
-    return inside;
+  function placeAt(element, point) {
+    if (!element || !mapFrame || !point) return;
+    const screen = MapGeometry.toScreen(mapFrame, point);
+    element.style.left = screen.x + 'px';
+    element.style.top = screen.y + 'px';
   }
 
-  // 网格格子在可行走矩形内且不在障碍多边形内
-  function isWalkable(mapConfig, gx, gy) {
-    const x = (gx + 0.5) / GRID_COLS;
-    const y = (gy + 0.5) / GRID_ROWS;
-    const b = mapConfig.walkableBounds;
-    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return false;
-    const blocked = mapConfig.blockedPolygons || [];
-    for (let i = 0; i < blocked.length; i++) {
-      if (pointInPolygon(x, y, blocked[i])) return false;
-    }
-    return true;
-  }
-
-  // 点 (0-1) 是否在可行走区域内
-  function isPointWalkable(mapConfig, x, y) {
-    const b = mapConfig.walkableBounds;
-    if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return false;
-    const blocked = mapConfig.blockedPolygons || [];
-    for (let i = 0; i < blocked.length; i++) {
-      if (pointInPolygon(x, y, blocked[i])) return false;
-    }
-    return true;
-  }
-
-  // 若出生点落在障碍内，返回最近的可行走点 (0-1)
-  function ensureWalkableSpawn(mapConfig, x, y) {
-    if (isPointWalkable(mapConfig, x, y)) return { x, y };
-    let best = { x, y };
-    let bestDist = Infinity;
-    for (let gy = 0; gy < GRID_ROWS; gy++) {
-      for (let gx = 0; gx < GRID_COLS; gx++) {
-        if (!isWalkable(mapConfig, gx, gy)) continue;
-        const cx = (gx + 0.5) / GRID_COLS;
-        const cy = (gy + 0.5) / GRID_ROWS;
-        const d = (cx - x) ** 2 + (cy - y) ** 2;
-        if (d < bestDist) {
-          bestDist = d;
-          best = { x: cx, y: cy };
-        }
-      }
-    }
-    return best;
-  }
-
-  // A* 寻路，起点终点为地图像素坐标，返回玩家坐标序列 [ {left, top}, ... ]
-  function findPath(mapConfig, startMapX, startMapY, endMapX, endMapY) {
-    const toGrid = (px, py) => ({
-      gx: Math.floor((px / mapWidth) * GRID_COLS),
-      gy: Math.floor((py / mapHeight) * GRID_ROWS)
+  function refreshMapLayout() {
+    const mapEl = document.getElementById('game-map');
+    const mapImg = document.getElementById('map-bg');
+    if (!mapEl || !mapImg || !mapImg.naturalWidth || !mapImg.naturalHeight) return;
+    mapFrame = MapGeometry.imageFrame(mapEl.clientWidth, mapEl.clientHeight, mapImg.naturalWidth, mapImg.naturalHeight);
+    imageAspect = mapImg.naturalHeight / mapImg.naturalWidth;
+    const mapConfig = API.getMapConfig(storyConfig.mapId);
+    storyConfig.npcs.forEach(npc => {
+      placeAt(document.getElementById(`npc-${npc.npcId}`), mapConfig.npcSlots[npc.slot]);
     });
-    const toPlayer = (gx, gy) => ({
-      left: ((gx + 0.5) / GRID_COLS) * mapWidth - PLAYER_ANCHOR_X,
-      top: ((gy + 0.5) / GRID_ROWS) * mapHeight - PLAYER_ANCHOR_Y
-    });
-    const clampGrid = (gx, gy) => ({
-      gx: Math.max(0, Math.min(GRID_COLS - 1, gx)),
-      gy: Math.max(0, Math.min(GRID_ROWS - 1, gy))
-    });
-
-    const s = clampGrid(toGrid(startMapX, startMapY).gx, toGrid(startMapX, startMapY).gy);
-    const e = clampGrid(toGrid(endMapX, endMapY).gx, toGrid(endMapX, endMapY).gy);
-    if (!isWalkable(mapConfig, e.gx, e.gy)) return [];
-
-    const neighbors = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-    const open = [{ gx: s.gx, gy: s.gy, f: 0, g: 0 }];
-    const cameFrom = {};
-    const gScore = { [`${s.gx},${s.gy}`]: 0 };
-
-    const key = (gx, gy) => `${gx},${gy}`;
-    const heuristic = (a, b) => Math.abs(a.gx - b.gx) + Math.abs(a.gy - b.gy);
-
-    while (open.length > 0) {
-      open.sort((a, b) => a.f - b.f);
-      const cur = open.shift();
-      if (cur.gx === e.gx && cur.gy === e.gy) {
-        const path = [];
-        let c = cur;
-        while (c) {
-          path.unshift(toPlayer(c.gx, c.gy));
-          c = cameFrom[key(c.gx, c.gy)];
-        }
-        return path;
-      }
-      for (const [dx, dy] of neighbors) {
-        const nx = cur.gx + dx;
-        const ny = cur.gy + dy;
-        if (nx < 0 || nx >= GRID_COLS || ny < 0 || ny >= GRID_ROWS) continue;
-        if (!isWalkable(mapConfig, nx, ny)) continue;
-        const tentative = (gScore[key(cur.gx, cur.gy)] || 0) + 1;
-        const nk = key(nx, ny);
-        if (tentative >= (gScore[nk] ?? Infinity)) continue;
-        cameFrom[nk] = cur;
-        gScore[nk] = tentative;
-        open.push({ gx: nx, gy: ny, g: tentative, f: tentative + heuristic({ gx: nx, gy: ny }, e) });
-      }
-    }
-    return [];
+    placeAt(document.getElementById('player'), playerPosition);
   }
 
   // 渲染页面
@@ -166,7 +65,7 @@ const GameModule = (function() {
       <!-- 游戏地图区域 -->
       <div id="game-map" class="relative flex-1 overflow-hidden">
         <img id="map-bg" src="${mapConfig.image}" alt="Map" 
-             class="absolute inset-0 w-full h-full object-cover">
+             class="absolute inset-0 w-full h-full object-contain">
         <!-- NPC 和玩家将由 JS 动态生成 -->
       </div>
       
@@ -180,14 +79,8 @@ const GameModule = (function() {
 
     // 等待图片加载后初始化地图
     const mapBg = document.getElementById('map-bg');
-    mapBg.onload = () => {
-      initMap();
-    };
-    
-    // 如果图片已缓存
-    if (mapBg.complete) {
-      initMap();
-    }
+    mapBg.onload = initMap;
+    if (mapBg.complete && mapBg.naturalWidth) initMap();
     
     bindEvents();
   }
@@ -212,69 +105,51 @@ const GameModule = (function() {
     return moodMap[mood] || mood;
   }
 
-  // 初始化地图
+  // 按原图坐标放置 NPC 和玩家。图片从缓存加载时也只初始化一次。
   function initMap() {
+    if (mapInitialized || !container) return;
     const mapEl = document.getElementById('game-map');
+    const mapImg = document.getElementById('map-bg');
+    if (!mapEl || !mapImg || !mapImg.naturalWidth) return;
+    mapInitialized = true;
     const mapConfig = API.getMapConfig(storyConfig.mapId);
     const user = Store.get('user');
-    
-    mapWidth = mapEl.offsetWidth;
-    mapHeight = mapEl.offsetHeight;
-    
-    // 放置 NPC
+
     storyConfig.npcs.forEach(npc => {
       const npcConfig = API.getNpcConfig(npc.npcId);
-      const slotPos = mapConfig.npcSlots[npc.slot];
-      
-      if (!slotPos || !npcConfig) return;
-      
-      const x = slotPos.x * mapWidth;
-      const y = slotPos.y * mapHeight;
-      
+      if (!mapConfig.npcSlots[npc.slot] || !npcConfig) return;
       const npcEl = document.createElement('div');
-      npcEl.className = 'npc-sprite';
+      npcEl.className = mapConfig.npcSlots[npc.slot].y < 0.20 ? 'npc-sprite edge-top' : 'npc-sprite';
       npcEl.id = `npc-${npc.npcId}`;
-      npcEl.style.left = (x - NPC_ANCHOR_X) + 'px';
-      npcEl.style.top = (y - NPC_ANCHOR_Y) + 'px';
       npcEl.dataset.npcId = npc.npcId;
-      
       npcEl.innerHTML = `
         <div class="npc-name-top">${npcConfig.name}</div>
         <div class="npc-exclamation hidden">!</div>
-        <img src="${npcConfig.images.idle}" alt="${npcConfig.name}" 
-             class="npc-image" data-idle="${npcConfig.images.idle}" 
+        <img src="${npcConfig.images.idle}" alt="${npcConfig.name}"
+             class="npc-image" data-idle="${npcConfig.images.idle}"
              data-surprised="${npcConfig.images.surprised}">
       `;
-      
       npcEl.addEventListener('click', () => onNpcClick(npc.npcId));
       mapEl.appendChild(npcEl);
     });
-    
-    // 放置玩家（若配置的出生点在障碍内，自动挪到最近可行走点）
-    const playerPos = ensureWalkableSpawn(mapConfig, mapConfig.playerStart.x, mapConfig.playerStart.y);
-    const playerX = playerPos.x * mapWidth;
-    const playerY = playerPos.y * mapHeight;
-    
+
+    playerPosition = { ...mapConfig.playerStart };
     const playerEl = document.createElement('div');
     playerEl.className = 'player-sprite';
     playerEl.id = 'player';
-    playerEl.style.left = (playerX - PLAYER_ANCHOR_X) + 'px';
-    playerEl.style.top = (playerY - PLAYER_ANCHOR_Y) + 'px';
-    
     const avatarMap = { boy: 'assets/player/player_boy.png', girl: 'assets/player/player_girl.png' };
     const avatarImg = user?.isGuest
       ? 'assets/player/player_guest.png'
       : (avatarMap[user?.avatar] || 'assets/player/player_guest.png');
-
     playerEl.innerHTML = `
       <div class="player-name-top">${user?.nickname || '游客'}</div>
       <img src="${avatarImg}" alt="Player" class="player-image">
     `;
     mapEl.appendChild(playerEl);
-    
-    // 地图点击事件
     mapEl.addEventListener('click', onMapClick);
-    
+    refreshMapLayout();
+    mapResizeObserver = new ResizeObserver(refreshMapLayout);
+    mapResizeObserver.observe(mapEl);
     startRound();
   }
 
@@ -306,155 +181,101 @@ const GameModule = (function() {
     EventBus.emit(Events.ROUND_START, { round: currentRound + 1, dialogue });
   }
 
-  // 地图点击（移动玩家）
+  // 点击的位置和人物脚底都按原图坐标判断碰撞。
   function onMapClick(e) {
-    // 对话中不能移动
-    if (isDialogueActive) return;
-    if (e.target.closest('.npc-sprite')) return;
-    
+    if (isDialogueActive || e.target.closest('.npc-sprite') || !mapFrame) return;
     const rect = document.getElementById('game-map').getBoundingClientRect();
-    const mapConfig = API.getMapConfig(storyConfig.mapId);
-    const bounds = mapConfig.walkableBounds;
-    
-    let x = e.clientX - rect.left;
-    let y = e.clientY - rect.top;
-    
-    const minX = bounds.minX * mapWidth;
-    const maxX = bounds.maxX * mapWidth;
-    const minY = bounds.minY * mapHeight;
-    const maxY = bounds.maxY * mapHeight;
-    
-    // 边界限制：仅用脚底碰撞盒与边界碰撞（脚底在锚点下方 PLAYER_FEET_OFFSET_Y、中心偏右 PLAYER_FEET_OFFSET_X）
-    x = Math.max(minX - PLAYER_FEET_OFFSET_X + PLAYER_FEET_HALF_W, Math.min(maxX - PLAYER_FEET_OFFSET_X - PLAYER_FEET_HALF_W, x));
-    y = Math.max(minY - PLAYER_FEET_OFFSET_Y + PLAYER_FEET_HALF_H, Math.min(maxY - PLAYER_FEET_OFFSET_Y - PLAYER_FEET_HALF_H, y));
-    
-    const feetCxClamped = x + PLAYER_FEET_OFFSET_X;
-    const feetCyClamped = y + PLAYER_FEET_OFFSET_Y;
-    const rx = feetCxClamped / mapWidth;
-    const ry = feetCyClamped / mapHeight;
-    const blocked = mapConfig.blockedPolygons || [];
-    for (let i = 0; i < blocked.length; i++) {
-      if (pointInPolygon(rx, ry, blocked[i])) {
-        UI.showToast('无法到达', 'info');
-        return;
-      }
+    const point = MapGeometry.fromScreen(mapFrame, e.clientX - rect.left, e.clientY - rect.top);
+    if (!point || !MapGeometry.isWalkable(API.getMapConfig(storyConfig.mapId), point.x, point.y, imageAspect)) {
+      UI.showToast('无法到达', 'info');
+      return;
     }
-    
-    movePlayerTo(x - PLAYER_ANCHOR_X, y - PLAYER_ANCHOR_Y);
+    movePlayerTo(point);
   }
 
-  // 玩家与 NPC 的“可对话”距离（像素）
-  const TALK_RANGE = 100;
-
-  // 玩家是否在 NPC 对话范围内（玩家中心 PLAYER_ANCHOR；NPC 脚底中心 NPC_ANCHOR）
   function isPlayerNearNpc(npcId) {
-    const player = document.getElementById('player');
-    const npcEl = document.getElementById(`npc-${npcId}`);
-    if (!player || !npcEl) return false;
-    const px = parseFloat(player.style.left) + PLAYER_ANCHOR_X;
-    const py = parseFloat(player.style.top) + PLAYER_ANCHOR_Y;
-    const nx = parseFloat(npcEl.style.left) + NPC_ANCHOR_X;
-    const ny = parseFloat(npcEl.style.top) + NPC_ANCHOR_Y;
-    return Math.hypot(px - nx, py - ny) <= TALK_RANGE;
+    const npc = storyConfig.npcs.find(item => item.npcId === npcId);
+    const slot = npc && API.getMapConfig(storyConfig.mapId).npcSlots[npc.slot];
+    if (!slot || !playerPosition || !mapFrame) return false;
+    const playerScreen = MapGeometry.toScreen(mapFrame, playerPosition);
+    const npcScreen = MapGeometry.toScreen(mapFrame, slot);
+    return Math.hypot(playerScreen.x - npcScreen.x, playerScreen.y - npcScreen.y) <= TALK_RANGE;
   }
 
-  // NPC 点击：先移动到 NPC 附近，到达且距离足够近后才开始对话
+  // 找到 NPC 附近确实可走且可抵达的位置，避免人物走进树、水或建筑。
   function onNpcClick(npcId) {
     if (isDialogueActive) return;
-    
     const dialogue = storyConfig.dialogues[currentRound];
-    
     if (!dialogue || dialogue.npcId !== npcId) {
       UI.showToast('这位NPC暂时没有要说的', 'info');
       return;
     }
-    
-    const npcEl = document.getElementById(`npc-${npcId}`);
-    const npcLeft = parseFloat(npcEl.style.left);
-    const npcTop = parseFloat(npcEl.style.top);
-    const targetLeft = npcLeft + NPC_ANCHOR_X - PLAYER_ANCHOR_X;
-    const targetTop = npcTop + NPC_ANCHOR_Y - 35;
-    
-    // 已在对话范围内则直接开始对话
     if (isPlayerNearNpc(npcId)) {
       startDialogue();
       return;
     }
-    
-    // 否则先移动过去，到达后再检查距离并开始对话
-    movePlayerTo(targetLeft, targetTop, () => {
-      if (isPlayerNearNpc(npcId)) {
-        startDialogue();
-      }
-    });
-  }
-
-  // 沿路径动画移动玩家（目标为玩家元素 left/top）
-  function movePlayerTo(targetLeft, targetTop, callback) {
-    const player = document.getElementById('player');
-    if (!player) return;
-
-    if (moveAnimationId != null) {
-      cancelAnimationFrame(moveAnimationId);
-      moveAnimationId = null;
-    }
-
-    const curLeft = parseFloat(player.style.left) || 0;
-    const curTop = parseFloat(player.style.top) || 0;
-    const dist = Math.hypot(targetLeft - curLeft, targetTop - curTop);
-    if (dist < 4) {
-      player.style.left = targetLeft + 'px';
-      player.style.top = targetTop + 'px';
-      if (callback) setTimeout(callback, 200);
+    const npc = storyConfig.npcs.find(item => item.npcId === npcId);
+    const mapConfig = API.getMapConfig(storyConfig.mapId);
+    const slot = npc && mapConfig.npcSlots[npc.slot];
+    if (!slot) return;
+    const candidates = [
+      { x: slot.x, y: slot.y + 0.06 },
+      { x: slot.x - 0.05, y: slot.y + 0.015 },
+      { x: slot.x + 0.05, y: slot.y + 0.015 },
+      slot
+    ];
+    for (const point of candidates) {
+      if (!MapGeometry.isWalkable(mapConfig, point.x, point.y, imageAspect)) continue;
+      if (!MapGeometry.findPath(mapConfig, playerPosition, point, imageAspect).length) continue;
+      movePlayerTo(point, () => { if (isPlayerNearNpc(npcId)) startDialogue(); });
       return;
     }
+    UI.showToast('无法到达这位角色', 'info');
+  }
+
+  function movePlayerTo(target, callback) {
+    if (!playerPosition || !mapFrame) return;
+    if (moveAnimationId != null) cancelAnimationFrame(moveAnimationId);
+    if (talkTimeoutId != null) clearTimeout(talkTimeoutId);
+    moveAnimationId = null;
+    talkTimeoutId = null;
 
     const mapConfig = API.getMapConfig(storyConfig.mapId);
-    const path = findPath(
-      mapConfig,
-      curLeft + PLAYER_ANCHOR_X, curTop + PLAYER_ANCHOR_Y,
-      targetLeft + PLAYER_ANCHOR_X, targetTop + PLAYER_ANCHOR_Y
-    );
-
-    if (path.length === 0) {
+    const path = MapGeometry.findPath(mapConfig, playerPosition, target, imageAspect);
+    if (!path.length) {
       UI.showToast('无法到达', 'info');
       return;
     }
-
-    let pathIndex = 0;
+    let pathIndex = 1;
     let lastTime = performance.now();
-
     function tick(now) {
-      if (isDialogueActive) {
+      if (isDialogueActive || !document.getElementById('player')) {
         moveAnimationId = null;
         return;
       }
-      const playerEl = document.getElementById('player');
-      if (!playerEl) {
-        moveAnimationId = null;
-        return;
-      }
-      const dt = (now - lastTime) / 1000;
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
       lastTime = now;
-      const left = parseFloat(playerEl.style.left) || 0;
-      const top = parseFloat(playerEl.style.top) || 0;
       const next = path[pathIndex];
-      const dx = next.left - left;
-      const dy = next.top - top;
-      const d = Math.hypot(dx, dy);
-      const step = MOVE_SPEED * Math.min(dt, 0.1);
-      if (d <= step || d < 1) {
-        playerEl.style.left = next.left + 'px';
-        playerEl.style.top = next.top + 'px';
+      const currentScreen = MapGeometry.toScreen(mapFrame, playerPosition);
+      const nextScreen = MapGeometry.toScreen(mapFrame, next);
+      const distance = Math.hypot(nextScreen.x - currentScreen.x, nextScreen.y - currentScreen.y);
+      const step = MOVE_SPEED * dt;
+      if (distance <= step || distance < 1) {
+        playerPosition = next;
         pathIndex++;
+        placeAt(document.getElementById('player'), playerPosition);
         if (pathIndex >= path.length) {
           moveAnimationId = null;
-          if (callback) setTimeout(callback, 200);
+          if (callback) talkTimeoutId = setTimeout(callback, 120);
           return;
         }
       } else {
-        playerEl.style.left = (left + (dx / d) * step) + 'px';
-        playerEl.style.top = (top + (dy / d) * step) + 'px';
+        const ratio = step / distance;
+        playerPosition = {
+          x: playerPosition.x + (next.x - playerPosition.x) * ratio,
+          y: playerPosition.y + (next.y - playerPosition.y) * ratio
+        };
+        placeAt(document.getElementById('player'), playerPosition);
       }
       moveAnimationId = requestAnimationFrame(tick);
     }
@@ -627,6 +448,13 @@ const GameModule = (function() {
 
   // 结束游戏
   function endGame() {
+    const previewMapId = Store.get('session.mapPreviewId');
+    if (previewMapId) {
+      Store.resetSession();
+      Router.go('mapEditor', { mapId: previewMapId });
+      UI.showToast('地图试玩结束', 'success');
+      return;
+    }
     Store.set('session.answers', answers);
     
     EventBus.emit(Events.GAME_END, {
@@ -639,10 +467,11 @@ const GameModule = (function() {
 
   // 退出游戏
   async function quitGame() {
-    const confirmed = await UI.confirm('确定要退出吗？进度将丢失。');
+    const previewMapId = Store.get('session.mapPreviewId');
+    const confirmed = await UI.confirm(previewMapId ? '结束试玩并返回地图编辑？' : '确定要退出吗？进度将丢失。');
     if (confirmed) {
       Store.resetSession();
-      Router.go('auth');
+      Router.go(previewMapId ? 'mapEditor' : 'auth', previewMapId ? { mapId: previewMapId } : {});
     }
   }
 
@@ -666,6 +495,9 @@ const GameModule = (function() {
       errorCount = 0;
       answers = [];
       isDialogueActive = false;
+      mapInitialized = false;
+      mapFrame = null;
+      playerPosition = null;
       
       render();
       EventBus.emit(Events.SCENE_READY, { scene: 'game' });
@@ -676,6 +508,19 @@ const GameModule = (function() {
         cancelAnimationFrame(moveAnimationId);
         moveAnimationId = null;
       }
+      if (talkTimeoutId != null) {
+        clearTimeout(talkTimeoutId);
+        talkTimeoutId = null;
+      }
+      if (mapResizeObserver) {
+        mapResizeObserver.disconnect();
+        mapResizeObserver = null;
+      }
+      const mapBg = document.getElementById('map-bg');
+      if (mapBg) mapBg.onload = null;
+      mapInitialized = false;
+      mapFrame = null;
+      playerPosition = null;
       container = null;
       isDialogueActive = false;
     },

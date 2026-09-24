@@ -461,13 +461,15 @@ const API = (function() {
       const base = MAPS_CONFIG[mapId] || MAPS_CONFIG[1];
       let overrides = {};
       try {
-        overrides = JSON.parse(localStorage.getItem('wordquest_map_editor_overrides') || '{}')[String(mapId)] || {};
+        overrides = JSON.parse(localStorage.getItem(MAP_OVERRIDES_KEY) || '{}')[String(mapId)] || {};
       } catch (_) {}
       return {
         ...base,
         npcSlots: overrides.npcSlots ? { ...base.npcSlots, ...overrides.npcSlots } : base.npcSlots,
         walkableBounds: overrides.walkableBounds || base.walkableBounds,
-        blockedPolygons: overrides.blockedPolygons || []
+        walkablePaths: overrides.walkablePaths || base.walkablePaths || [],
+        walkablePolygons: overrides.walkablePolygons || base.walkablePolygons || [],
+        blockedPolygons: overrides.blockedPolygons || base.blockedPolygons || []
       };
     },
 
