@@ -186,7 +186,7 @@ const GameModule = (function() {
     if (isDialogueActive || e.target.closest('.npc-sprite') || !mapFrame) return;
     const rect = document.getElementById('game-map').getBoundingClientRect();
     const point = MapGeometry.fromScreen(mapFrame, e.clientX - rect.left, e.clientY - rect.top);
-    if (!point || !MapGeometry.isWalkable(API.getMapConfig(storyConfig.mapId), point.x, point.y, imageAspect)) {
+    if (!point) {
       UI.showToast('无法到达', 'info');
       return;
     }

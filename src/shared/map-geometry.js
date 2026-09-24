@@ -1,7 +1,21 @@
 /** 地图上的站位、碰撞与寻路统一使用原图的 0～1 坐标。 */
 const MapGeometry = (function() {
-  const GRID_COLS = 48;
-  const GRID_ROWS = 80;
+  const decodedMasks = new WeakMap();
+
+  function maskBytes(mask) {
+    if (decodedMasks.has(mask)) return decodedMasks.get(mask);
+    const binary = typeof Buffer !== 'undefined'
+      ? Buffer.from(mask.bits, 'base64')
+      : Uint8Array.from(atob(mask.bits), character => character.charCodeAt(0));
+    decodedMasks.set(mask, binary);
+    return binary;
+  }
+
+  function maskCell(mask, col, row) {
+    if (!mask || col < 0 || row < 0 || col >= mask.cols || row >= mask.rows) return false;
+    const index = row * mask.cols + col;
+    return !!(maskBytes(mask)[index >> 3] & (1 << (index & 7)));
+  }
 
   function imageFrame(viewWidth, viewHeight, imageWidth, imageHeight) {
     if (!viewWidth || !viewHeight || !imageWidth || !imageHeight) return null;
@@ -63,67 +77,161 @@ const MapGeometry = (function() {
     if (b && (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY)) return false;
     const paths = map.walkablePaths || [];
     const areas = map.walkablePolygons || [];
-    if (paths.length || areas.length) {
+    if (map.walkableMask || paths.length || areas.length) {
+      const mask = map.walkableMask;
+      const onMask = mask && maskCell(mask, Math.min(mask.cols - 1, Math.floor(x * mask.cols)), Math.min(mask.rows - 1, Math.floor(y * mask.rows)));
       const onPath = paths.some(path => isOnPath(x, y, path, heightOverWidth));
       const inArea = areas.some(area => pointInPolygon(x, y, area));
-      if (!onPath && !inArea) return false;
+      // 白色菱形覆盖了路面颜色，角色站位附近仍应可达。
+      const anchors = [map.playerStart, ...Object.values(map.npcSlots || {})].filter(Boolean);
+      const nearMarker = !!mask && anchors.some(point =>
+        (x - point.x) ** 2 + ((y - point.y) * heightOverWidth) ** 2 <= 0.035 ** 2
+      );
+      if (!onMask && !onPath && !inArea && !nearMarker) return false;
     }
     return !(map.blockedPolygons || []).some(area => pointInPolygon(x, y, area));
   }
 
   function findPath(map, start, end, heightOverWidth = 1.6) {
-    if (!isWalkable(map, end.x, end.y, heightOverWidth)) return [];
-    const key = (x, y) => y * GRID_COLS + x;
+    if (!start || !end || !Number.isFinite(end.x) || !Number.isFinite(end.y)
+        || end.x < 0 || end.x > 1 || end.y < 0 || end.y > 1) return [];
+    const cols = map.walkableMask?.cols || 72;
+    const rows = map.walkableMask?.rows || Math.round(cols * heightOverWidth);
+    const key = (x, y) => y * cols + x;
     const cell = point => ({
-      x: Math.max(0, Math.min(GRID_COLS - 1, Math.floor(point.x * GRID_COLS))),
-      y: Math.max(0, Math.min(GRID_ROWS - 1, Math.floor(point.y * GRID_ROWS)))
+      x: Math.max(0, Math.min(cols - 1, Math.floor(point.x * cols))),
+      y: Math.max(0, Math.min(rows - 1, Math.floor(point.y * rows)))
     });
-    const center = (x, y) => ({ x: (x + 0.5) / GRID_COLS, y: (y + 0.5) / GRID_ROWS });
-    const total = GRID_COLS * GRID_ROWS;
+    const center = (x, y) => ({ x: (x + 0.5) / cols, y: (y + 0.5) / rows });
+    const distance = (a, b) => Math.hypot(a.x - b.x, (a.y - b.y) * heightOverWidth);
+    const total = cols * rows;
     const allowed = new Uint8Array(total);
-    for (let y = 0; y < GRID_ROWS; y++) {
-      for (let x = 0; x < GRID_COLS; x++) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
         const p = center(x, y);
         allowed[key(x, y)] = isWalkable(map, p.x, p.y, heightOverWidth) ? 1 : 0;
       }
     }
-    const startCell = cell(start), endCell = cell(end);
-    const startKey = key(startCell.x, startCell.y);
-    const endKey = key(endCell.x, endCell.y);
-    if (!allowed[startKey] || !allowed[endKey]) return [];
+    const startCell = cell(start);
+    let startKey = key(startCell.x, startCell.y);
+    if (!allowed[startKey]) {
+      let bestDistance = Infinity;
+      for (let index = 0; index < total; index++) {
+        if (!allowed[index]) continue;
+        const d = distance(start, center(index % cols, Math.floor(index / cols)));
+        if (d < bestDistance) { bestDistance = d; startKey = index; }
+      }
+      if (bestDistance > 0.08) return [];
+    }
 
-    const previous = new Int32Array(total).fill(-1);
-    const seen = new Uint8Array(total);
-    const queue = new Int32Array(total);
+    // 离障碍越远，路线代价越低；人物会走道路中部，而不是贴着水边和墙角。
+    const clearance = new Uint8Array(total).fill(255);
+    const clearanceQueue = new Int32Array(total);
     let head = 0, tail = 0;
-    queue[tail++] = startKey;
-    seen[startKey] = 1;
-    while (head < tail && !seen[endKey]) {
-      const current = queue[head++];
-      const x = current % GRID_COLS, y = Math.floor(current / GRID_COLS);
+    for (let index = 0; index < total; index++) {
+      if (allowed[index]) continue;
+      clearance[index] = 0;
+      clearanceQueue[tail++] = index;
+    }
+    while (head < tail) {
+      const current = clearanceQueue[head++];
+      const x = current % cols, y = Math.floor(current / cols);
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx, ny = y + dy;
-        if (nx < 0 || nx >= GRID_COLS || ny < 0 || ny >= GRID_ROWS) continue;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
         const next = key(nx, ny);
-        if (!allowed[next] || seen[next]) continue;
-        seen[next] = 1;
-        previous[next] = current;
-        queue[tail++] = next;
+        if (clearance[next] <= clearance[current] + 1) continue;
+        clearance[next] = clearance[current] + 1;
+        clearanceQueue[tail++] = next;
       }
     }
-    if (!seen[endKey]) return [];
+
+    const originalEndCell = cell(end);
+    const wantedKey = key(originalEndCell.x, originalEndCell.y);
+    const targetIsWalkable = isWalkable(map, end.x, end.y, heightOverWidth);
+    const wantedIsAllowed = !!allowed[wantedKey];
+    const previous = new Int32Array(total).fill(-1);
+    const closed = new Uint8Array(total);
+    const costs = new Float32Array(total).fill(Infinity);
+    const heap = [];
+    const push = (index, priority) => {
+      let position = heap.length;
+      heap.push({ index, priority });
+      while (position > 0) {
+        const parent = (position - 1) >> 1;
+        if (heap[parent].priority <= priority) break;
+        heap[position] = heap[parent];
+        position = parent;
+      }
+      heap[position] = { index, priority };
+    };
+    const pop = () => {
+      const first = heap[0];
+      const last = heap.pop();
+      if (heap.length) {
+        let position = 0;
+        while (position * 2 + 1 < heap.length) {
+          let child = position * 2 + 1;
+          if (child + 1 < heap.length && heap[child + 1].priority < heap[child].priority) child++;
+          if (last.priority <= heap[child].priority) break;
+          heap[position] = heap[child];
+          position = child;
+        }
+        heap[position] = last;
+      }
+      return first.index;
+    };
+    const heuristic = index => wantedIsAllowed
+      ? Math.hypot(index % cols - originalEndCell.x, Math.floor(index / cols) - originalEndCell.y)
+      : 0;
+    costs[startKey] = 0;
+    push(startKey, heuristic(startKey));
+    while (heap.length) {
+      const current = pop();
+      if (closed[current]) continue;
+      closed[current] = 1;
+      if (wantedIsAllowed && current === wantedKey) break;
+      const x = current % cols, y = Math.floor(current / cols);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const next = key(nx, ny);
+        if (!allowed[next] || closed[next]) continue;
+        if (dx && dy && (!allowed[key(x + dx, y)] || !allowed[key(x, y + dy)])) continue;
+        const stepCost = (dx && dy ? Math.SQRT2 : 1) * (1 + 3 / (clearance[next] + 1));
+        const candidateCost = costs[current] + stepCost;
+        if (candidateCost >= costs[next]) continue;
+        costs[next] = candidateCost;
+        previous[next] = current;
+        push(next, candidateCost + heuristic(next));
+      }
+    }
+
+    // 点击在地面边缘时，选最近的可抵达落脚格；不把独立区域误当作已到达。
+    let endKey = wantedIsAllowed && closed[wantedKey] ? wantedKey : -1;
+    let bestDistance = endKey >= 0
+      ? distance(end, center(endKey % cols, Math.floor(endKey / cols))) : Infinity;
+    if (endKey < 0) {
+      for (let index = 0; index < total; index++) {
+        if (!closed[index]) continue;
+        const d = distance(end, center(index % cols, Math.floor(index / cols)));
+        if (d < bestDistance) { bestDistance = d; endKey = index; }
+      }
+    }
+    if (endKey < 0 || bestDistance > (targetIsWalkable ? 0.025 : 0.09)) return [];
 
     const route = [];
     for (let at = endKey; at !== -1; at = previous[at]) {
-      route.push(center(at % GRID_COLS, Math.floor(at / GRID_COLS)));
+      route.push(center(at % cols, Math.floor(at / cols)));
     }
     route.reverse();
     route[0] = start;
-    route.push(end);
+    const destination = targetIsWalkable && bestDistance < 0.025 ? end : route[route.length - 1];
+    route.push(destination);
     return route;
   }
 
-  return { imageFrame, toScreen, fromScreen, pointInPolygon, isWalkable, findPath };
+  return { imageFrame, toScreen, fromScreen, pointInPolygon, maskCell, isWalkable, findPath };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = MapGeometry;

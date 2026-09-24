@@ -68,6 +68,7 @@ const MapEditorModule = (function() {
         <!-- 地图图片 + 叠层 -->
         <div id="map-editor-image-wrap" class="relative rounded overflow-hidden border-2 border-gray-300 bg-gray-100" style="min-height: 200px;">
           <img id="map-editor-img" src="${mapData.image}" alt="地图" class="w-full h-auto block">
+          <canvas id="map-editor-mask" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
           <div id="map-editor-overlay" class="absolute inset-0 pointer-events-none"></div>
           <div id="map-editor-markers" class="absolute inset-0 pointer-events-none"></div>
           <svg id="map-editor-svg" class="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none" style="left:0;top:0"></svg>
@@ -228,6 +229,7 @@ const MapEditorModule = (function() {
 
   function refreshWalkablePreview() {
     const mapData = getMapData(currentMapId);
+    refreshMaskPreview(mapData);
     const minX = Number(document.getElementById('wb-minX')?.value);
     const maxX = Number(document.getElementById('wb-maxX')?.value);
     const minY = Number(document.getElementById('wb-minY')?.value);
@@ -242,7 +244,7 @@ const MapEditorModule = (function() {
     const bw = Math.max(0, (maxX - minX) * width), bh = Math.max(0, (maxY - minY) * height);
     let html = `<defs><clipPath id="walkable-clip"><rect x="${bx}" y="${by}" width="${bw}" height="${bh}"/></clipPath></defs>`;
     html += `<g clip-path="url(#walkable-clip)">`;
-    if (!(mapData.walkablePaths || []).length && !(mapData.walkablePolygons || []).length) {
+    if (!mapData.walkableMask && !(mapData.walkablePaths || []).length && !(mapData.walkablePolygons || []).length) {
       html += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="rgba(0,200,0,0.18)"/>`;
     }
     (mapData.walkablePaths || []).forEach(path => {
@@ -259,6 +261,29 @@ const MapEditorModule = (function() {
       html += `<polygon points="${pts}" fill="rgba(200,0,0,0.35)" stroke="red" stroke-width="2"/>`;
     });
     svg.innerHTML = html;
+  }
+
+  function refreshMaskPreview(mapData) {
+    const canvas = document.getElementById('map-editor-mask');
+    const mask = mapData.walkableMask;
+    if (!canvas || !mask) return;
+    canvas.width = mask.cols;
+    canvas.height = mask.rows;
+    const context = canvas.getContext('2d');
+    const pixels = context.createImageData(mask.cols, mask.rows);
+    const bounds = mapData.walkableBounds;
+    for (let row = 0; row < mask.rows; row++) {
+      for (let col = 0; col < mask.cols; col++) {
+        const x = (col + 0.5) / mask.cols, y = (row + 0.5) / mask.rows;
+        if (!MapGeometry.maskCell(mask, col, row) || x < bounds.minX || x > bounds.maxX || y < bounds.minY || y > bounds.maxY) continue;
+        const offset = (row * mask.cols + col) * 4;
+        pixels.data[offset] = 0;
+        pixels.data[offset + 1] = 190;
+        pixels.data[offset + 2] = 70;
+        pixels.data[offset + 3] = 90;
+      }
+    }
+    context.putImageData(pixels, 0, 0);
   }
 
   function refreshDrawingPolygon() {

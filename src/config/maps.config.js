@@ -1,12 +1,15 @@
 /**
  * WordQuest 地图配置
  * 所有坐标均以原图左上角为 (0, 0)、右下角为 (1, 1)。
- * npcSlots 对应图中的白色菱形站位标记；walkablePaths 是林道、码头等窄通道。
- * blockedPolygons 从可走区域扣除固定建筑和场景障碍。
+ * npcSlots 对应图中的白色菱形站位标记。森林、海港和废墟的地面碰撞网格
+ * 根据原图生成，另用多边形补上桥与草地通道、扣除大型场景障碍。
  */
 
 // 旧编辑器的本地覆盖使用另一版本坐标；保留旧数据，但不让它覆盖新版地图。
-const MAP_OVERRIDES_KEY = 'wordquest_map_editor_overrides_v2';
+const MAP_OVERRIDES_KEY = 'wordquest_map_editor_overrides_v3';
+const COLLISION_MASKS = typeof module !== 'undefined' && module.exports
+  ? require('./collision-masks.config.js')
+  : MAP_COLLISION_MASKS;
 
 const MAPS_CONFIG = {
   1: {
@@ -16,10 +19,7 @@ const MAPS_CONFIG = {
     image: "assets/maps/map_01_forest.png",
     moods: ["warm", "sad"],
     walkableBounds: { minX: 0.03, maxX: 0.94, minY: 0.02, maxY: 0.98 },
-    walkablePaths: [
-      { radius: 0.06, points: [{ x: 0.12, y: 0.97 }, { x: 0.20, y: 0.96 }, { x: 0.21, y: 0.88 }, { x: 0.30, y: 0.81 }, { x: 0.43, y: 0.74 }, { x: 0.56, y: 0.70 }, { x: 0.69, y: 0.71 }] },
-      { radius: 0.06, points: [{ x: 0.30, y: 0.81 }, { x: 0.20, y: 0.67 }, { x: 0.21, y: 0.58 }, { x: 0.33, y: 0.51 }, { x: 0.48, y: 0.45 }, { x: 0.60, y: 0.40 }, { x: 0.68, y: 0.34 }, { x: 0.74, y: 0.24 }, { x: 0.77, y: 0.14 }, { x: 0.77, y: 0.02 }] }
-    ],
+    walkableMask: COLLISION_MASKS[1],
     npcSlots: {
       1: { x: 0.77, y: 0.14 },
       2: { x: 0.21, y: 0.58 },
@@ -82,9 +82,14 @@ const MAPS_CONFIG = {
     image: "assets/maps/map_04_harbor.png",
     moods: ["funny", "sad"],
     walkableBounds: { minX: 0.04, maxX: 0.97, minY: 0.16, maxY: 0.91 },
-    walkablePaths: [
-      { radius: 0.07, points: [{ x: 0.91, y: 0.86 }, { x: 0.76, y: 0.74 }, { x: 0.56, y: 0.67 }, { x: 0.37, y: 0.59 }, { x: 0.27, y: 0.52 }] },
-      { radius: 0.07, points: [{ x: 0.27, y: 0.52 }, { x: 0.42, y: 0.50 }, { x: 0.54, y: 0.56 }, { x: 0.69, y: 0.48 }, { x: 0.65, y: 0.39 }, { x: 0.49, y: 0.34 }, { x: 0.35, y: 0.27 }, { x: 0.35, y: 0.23 }] }
+    walkableMask: COLLISION_MASKS[4],
+    blockedPolygons: [
+      [{ x: 0.04, y: 0.39 }, { x: 0.23, y: 0.39 }, { x: 0.25, y: 0.50 }, { x: 0.04, y: 0.52 }],
+      [{ x: 0.42, y: 0.17 }, { x: 0.63, y: 0.17 }, { x: 0.64, y: 0.28 }, { x: 0.42, y: 0.28 }],
+      [{ x: 0.71, y: 0.29 }, { x: 0.94, y: 0.29 }, { x: 0.94, y: 0.45 }, { x: 0.71, y: 0.45 }],
+      [{ x: 0.44, y: 0.37 }, { x: 0.59, y: 0.37 }, { x: 0.59, y: 0.46 }, { x: 0.44, y: 0.46 }],
+      [{ x: 0.61, y: 0.40 }, { x: 0.76, y: 0.40 }, { x: 0.76, y: 0.53 }, { x: 0.61, y: 0.53 }],
+      [{ x: 0.69, y: 0.55 }, { x: 0.98, y: 0.55 }, { x: 0.98, y: 0.70 }, { x: 0.69, y: 0.70 }]
     ],
     npcSlots: {
       1: { x: 0.35, y: 0.23 },
@@ -92,7 +97,7 @@ const MAPS_CONFIG = {
       3: { x: 0.54, y: 0.56 },
       4: { x: 0.76, y: 0.74 }
     },
-    playerStart: { x: 0.91, y: 0.86 }
+    playerStart: { x: 0.87, y: 0.82 }
   },
 
   5: {
@@ -102,9 +107,9 @@ const MAPS_CONFIG = {
     image: "assets/maps/map_05_ruins.png",
     moods: ["sad"],
     walkableBounds: { minX: 0.04, maxX: 0.94, minY: 0.21, maxY: 0.96 },
-    walkablePaths: [
-      { radius: 0.07, points: [{ x: 0.21, y: 0.93 }, { x: 0.21, y: 0.88 }, { x: 0.33, y: 0.81 }, { x: 0.50, y: 0.81 }, { x: 0.50, y: 0.76 }, { x: 0.68, y: 0.74 }] },
-      { radius: 0.07, points: [{ x: 0.50, y: 0.76 }, { x: 0.43, y: 0.70 }, { x: 0.25, y: 0.57 }, { x: 0.40, y: 0.51 }, { x: 0.56, y: 0.44 }, { x: 0.75, y: 0.36 }, { x: 0.62, y: 0.31 }, { x: 0.43, y: 0.26 }] }
+    walkableMask: COLLISION_MASKS[5],
+    walkablePolygons: [
+      [{ x: 0.39, y: 0.48 }, { x: 0.44, y: 0.42 }, { x: 0.48, y: 0.33 }, { x: 0.54, y: 0.29 }, { x: 0.58, y: 0.34 }, { x: 0.53, y: 0.40 }, { x: 0.49, y: 0.48 }, { x: 0.43, y: 0.53 }]
     ],
     npcSlots: {
       1: { x: 0.75, y: 0.36 },
